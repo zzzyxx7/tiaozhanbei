@@ -1,0 +1,10 @@
+# Local secret/env files
+.env
+.env.*
+src/main/resources/application-local.properties
+src/main/resources/application-secret.properties
+src/main/resources/application-dev.yml
+
+# IDE / build outputs
+target/
+*.iml

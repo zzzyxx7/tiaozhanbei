@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: rule-backend
+  profiles:
+    active: dev
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${rule.datasource.url}
+    username: ${rule.datasource.username}
+    password: ${rule.datasource.password}
+
+  data:
+    redis:
+      host: ${rule.redis.host:127.0.0.1}
+      port: ${rule.redis.port:6379}
+      password: ${rule.redis.password:}
+      database: ${rule.redis.database:0}
+      timeout: ${rule.redis.timeout:2000ms}
+
+server:
+  port: ${rule.server.port:8080}
+  tomcat:
+    use-apr: NEVER
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
+ai:
+  prefill:
+    default-provider: ${rule.ai.prefill.default-provider:deepseek}
+    timeout-ms: ${rule.ai.prefill.timeout-ms:12000}
+  deepseek:
+    base-url: ${rule.ai.deepseek.base-url:https://api.deepseek.com}
+    model: ${rule.ai.deepseek.model:deepseek-chat}
+    api-key: ${rule.ai.deepseek.api-key:}
+  openai:
+    base-url: ${rule.ai.openai.base-url:https://api.openai.com}
+    model: ${rule.ai.openai.model:gpt-4o-mini}
+    api-key: ${rule.ai.openai.api-key:}
