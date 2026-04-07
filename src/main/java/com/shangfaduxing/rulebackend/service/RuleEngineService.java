@@ -1,7 +1,6 @@
 package com.shangfaduxing.rulebackend.service;
 
 import com.shangfaduxing.rulebackend.model.*;
-import com.shangfaduxing.rulebackend.rules.RuleData;
 import com.shangfaduxing.rulebackend.rules.step2.Step2Target;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +13,12 @@ import java.util.stream.Collectors;
  */
 @Service
 public class RuleEngineService {
+
+    private final RuleDbDataService ruleDbDataService;
+
+    public RuleEngineService(RuleDbDataService ruleDbDataService) {
+        this.ruleDbDataService = ruleDbDataService;
+    }
 
     public JudgeResponse judge(Map<String, Object> answers) {
         Map<String, Object> facts = extractFacts(answers);
@@ -53,7 +58,7 @@ public class RuleEngineService {
         for (Conclusion c : intermediateEval.conclusions) {
             if (c.getLawRefs() != null) lawRefIds.addAll(c.getLawRefs());
         }
-        List<Law> lawsApplied = RuleData.LAW_DATABASE.stream()
+        List<Law> lawsApplied = ruleDbDataService.getLaws().stream()
                 .filter(law -> lawRefIds.contains(law.getId()))
                 .collect(Collectors.toList());
 
@@ -74,7 +79,7 @@ public class RuleEngineService {
 
     // ============ Step2: buildStep2Plan ============
     public Step2PlanResponse buildStep2Plan(Map<String, Object> facts, String targetId) {
-        Step2Target target = RuleData.STEP2_TARGETS.stream()
+        Step2Target target = ruleDbDataService.getStep2Targets().stream()
                 .filter(t -> Objects.equals(t.getTargetId(), targetId))
                 .findFirst()
                 .orElse(null);
@@ -90,7 +95,7 @@ public class RuleEngineService {
             return resp;
         }
 
-        List<Law> legalBasis = RuleData.LAW_DATABASE.stream()
+        List<Law> legalBasis = ruleDbDataService.getLaws().stream()
                 .filter(law -> (target.getLegalRefs() != null) && target.getLegalRefs().contains(law.getId()))
                 .collect(Collectors.toList());
 
@@ -777,7 +782,8 @@ public class RuleEngineService {
 
     // ============ Step2 meta (targets + suggested ids) ============
     private Step2Meta buildStep2Meta(Map<String, Boolean> intermediate, Map<String, Boolean> composite) {
-        List<Step2TargetMeta> targets = RuleData.STEP2_TARGETS.stream()
+        List<Step2Target> allTargets = ruleDbDataService.getStep2Targets();
+        List<Step2TargetMeta> targets = allTargets.stream()
                 .map(t -> new Step2TargetMeta(t.getTargetId(), t.getTitle(), t.getDesc()))
                 .collect(Collectors.toList());
 
@@ -789,12 +795,12 @@ public class RuleEngineService {
             suggested.add("target_common_property_split");
         }
         if (suggested.isEmpty()) {
-            suggested = RuleData.STEP2_TARGETS.stream().map(Step2Target::getTargetId).collect(Collectors.toList());
+            suggested = allTargets.stream().map(Step2Target::getTargetId).collect(Collectors.toList());
         } else {
-            Set<String> existing = RuleData.STEP2_TARGETS.stream().map(Step2Target::getTargetId).collect(Collectors.toSet());
+            Set<String> existing = allTargets.stream().map(Step2Target::getTargetId).collect(Collectors.toSet());
             suggested = suggested.stream().filter(existing::contains).distinct().collect(Collectors.toList());
             if (suggested.isEmpty()) {
-                suggested = RuleData.STEP2_TARGETS.stream().map(Step2Target::getTargetId).collect(Collectors.toList());
+                suggested = allTargets.stream().map(Step2Target::getTargetId).collect(Collectors.toList());
             }
         }
         return new Step2Meta(targets, suggested);

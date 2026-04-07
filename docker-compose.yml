@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: rule-db
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"
+      MYSQL_DATABASE: "rule_engine_db"
+      TZ: "Asia/Shanghai"
+    ports:
+      - "3307:3306"
+    command:
+      [
+        "--character-set-server=utf8mb4",
+        "--collation-server=utf8mb4_unicode_ci"
+      ]
+    volumes:
+      - db_data:/var/lib/mysql
+
+  rule-backend:
+    build: .
+    container_name: rule-backend
+    depends_on:
+      - db
+    environment:
+      DB_URL: "jdbc:mysql://db:3306/rule_engine_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
+      DB_USER: "root"
+      DB_PASSWORD: "1234"
+      TZ: "Asia/Shanghai"
+    ports:
+      - "8080:8080"
+
+volumes:
+  db_data:
+
