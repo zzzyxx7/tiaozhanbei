@@ -82,6 +82,10 @@ public class RuleCenterService {
         return resp;
     }
 
+    public List<Map<String, Object>> causes() {
+        return causeAssetDbService.listEnabledCauses();
+    }
+
     public List<Map<String, Object>> questionnaire(String causeCode, String questionnaireId) {
         String normalized = normalizeCauseCode(causeCode);
         return causeAssetDbService.getQuestionGroups(normalized);

@@ -1,0 +1,9 @@
+target
+.git
+.idea
+.cursor
+node_modules
+*.log
+agent-tools
+agent-transcripts
+

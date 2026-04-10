@@ -30,6 +30,23 @@ public class CauseAssetDbService {
         }
     }
 
+    public List<Map<String, Object>> listEnabledCauses() {
+        try {
+            return jdbcTemplate.query(
+                    "SELECT cause_code, cause_name, questionnaire_id FROM rule_cause WHERE enabled=1 ORDER BY cause_code",
+                    (rs, rowNum) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("causeCode", rs.getString("cause_code"));
+                        m.put("causeName", rs.getString("cause_name"));
+                        m.put("questionnaireId", rs.getString("questionnaire_id"));
+                        return m;
+                    }
+            );
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
     public List<Map<String, Object>> getQuestionGroups(String causeCode) {
         try {
             String questionnaireId = jdbcTemplate.queryForObject(

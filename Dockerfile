@@ -1,4 +1,4 @@
-FROM eclipse-temurin:17-jdk-alpine AS builder
+FROM eclipse-temurin:21-jdk-alpine AS builder
 
 WORKDIR /app
 
@@ -9,14 +9,11 @@ RUN apk add --no-cache maven && \
     mvn -q -DskipTests package && \
     cp target/*.jar app.jar
 
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-ENV JAVA_OPTS="" \
-    DB_URL="jdbc:mysql://db:3306/rule_engine_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai" \
-    DB_USER="root" \
-    DB_PASSWORD="1234"
+ENV JAVA_OPTS=""
 
 COPY --from=builder /app/app.jar /app/app.jar
 
