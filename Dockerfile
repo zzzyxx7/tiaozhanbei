@@ -5,9 +5,10 @@ WORKDIR /app
 COPY pom.xml .
 COPY src ./src
 
+# 必须复制 Spring Boot 打好的可执行 fat jar，不能是 *-plain.jar（无 Main-Class）
 RUN apk add --no-cache maven && \
     mvn -q -DskipTests package && \
-    cp target/*.jar app.jar
+    cp target/rule-backend-0.0.1-SNAPSHOT.jar app.jar
 
 FROM eclipse-temurin:21-jre-alpine
 
