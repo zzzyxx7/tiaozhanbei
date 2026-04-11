@@ -16,11 +16,38 @@ Create `.env` under `/opt/rule-backend`:
 MYSQL_ROOT_PASSWORD=change_me_strong_password
 ```
 
-## 3) Start services
+## 3) 数据库自动初始化（推荐，与 DaMai 相同）
 
-`docker-compose` 已设置 `SPRING_PROFILES_ACTIVE=docker`，会加载 `application-docker.yml`，使用 `db`、`redis` 服务名连接数据库与缓存。**不要用默认的 `dev` 配置**（其中 `127.0.0.1` 在容器内指向本容器，会导致连不上 MySQL/Redis、进程反复重启）。
+1. 在本机用 `mysqldump` 导出完整库，例如：
 
-`Dockerfile` 里必须使用 **`target/rule-backend-0.0.1-SNAPSHOT.jar`**（Spring Boot 可执行 fat jar），不能使用 `cp target/*.jar`，否则会误拷 `*-plain.jar`，容器日志会出现 `no main manifest attribute`。
+   ```bash
+   mysqldump -h127.0.0.1 -uroot -p --databases rule_engine_db --result-file=rule_engine_db_init.sql
+   ```
+
+2. 在服务器上放到：
+
+   `sql/docker-entrypoint-initdb.d/init.sql`
+
+   例如：
+
+   ```bash
+   mv /opt/rule-backend/rule_engine_db_init.sql /opt/rule-backend/sql/docker-entrypoint-initdb.d/init.sql
+   ```
+
+3. **仅当 MySQL 数据卷为空时**会自动执行；若之前起过库，需删卷重建：
+
+   ```bash
+   docker compose down
+   docker volume rm rule-backend_db_data
+   ```
+
+   卷名以 `docker volume ls | grep rule` 为准。
+
+详见：`sql/docker-entrypoint-initdb.d/README.md`。
+
+## 4) Start services
+
+`docker-compose` 已设置 `SPRING_PROFILES_ACTIVE=docker`，会加载 `application-docker.yml`，使用 `db`、`redis` 服务名。**构建阶段使用官方镜像 `maven:3.9-eclipse-temurin-21-alpine`**，避免在 Alpine 里 `apk add maven` 因网络/TLS 失败。
 
 ```bash
 cd /opt/rule-backend
@@ -28,9 +55,18 @@ docker compose build --no-cache rule-backend
 docker compose up -d
 ```
 
-## 4) Initialize database (run once)
+### git pull 若提示 `rule_engine_db_init.sql` 会覆盖合并
 
-Execute SQL in this order:
+该文件应放在 `sql/docker-entrypoint-initdb.d/init.sql`，或移到家目录后再 pull：
+
+```bash
+mv rule_engine_db_init.sql ~/rule_engine_db_init.sql.bak
+git pull origin main
+```
+
+## 5) Initialize database（可选：未用 init.sql 时手动执行迁移）
+
+若未使用 `init.sql` 自动初始化，可按顺序手动导入（部分脚本依赖已有表，顺序勿乱）：
 
 ```bash
 docker exec -i rule-db mysql -uroot -p"$MYSQL_ROOT_PASSWORD" rule_engine_db < sql/migrate_rule_judge_tables.sql
@@ -41,7 +77,9 @@ docker exec -i rule-db mysql -uroot -p"$MYSQL_ROOT_PASSWORD" rule_engine_db < sq
 docker exec -i rule-db mysql -uroot -p"$MYSQL_ROOT_PASSWORD" rule_engine_db < sql/migrate_rule_judge_data_divorce.sql
 ```
 
-## 4) Check service status
+仓库中其余 `sql/migrate_*.sql`（如 `migrate_law_official_sources.sql`、`migrate_user_data_layer.sql` 等）按业务需要再执行。
+
+## 6) Check service status
 
 ```bash
 docker compose ps
@@ -50,7 +88,7 @@ docker compose logs -f rule-backend
 
 Backend is ready when logs show Spring Boot started successfully.
 
-## 5) Verify API
+## 7) Verify API
 
 Open in browser:
 
@@ -63,13 +101,13 @@ Quick check:
 curl "http://8.136.46.14:8080/api/rule/causes"
 ```
 
-## 6) Give frontend these URLs
+## 8) Give frontend these URLs
 
 - Base URL: `http://8.136.46.14:8080`
 - Docs URL: `http://8.136.46.14:8080/swagger-ui/index.html`
 - OpenAPI URL: `http://8.136.46.14:8080/v3/api-docs`
 
-## 7) Common operations
+## 9) Common operations
 
 Restart:
 
@@ -88,4 +126,3 @@ Stop all:
 ```bash
 docker compose down
 ```
-

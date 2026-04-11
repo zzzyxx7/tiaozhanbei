@@ -8,3 +8,7 @@ src/main/resources/application-dev.yml
 # IDE / build outputs
 target/
 *.iml
+
+# 本地/服务器上的全库备份（勿提交）
+rule_engine_db_init.sql
+sql/docker-entrypoint-initdb.d/init.sql

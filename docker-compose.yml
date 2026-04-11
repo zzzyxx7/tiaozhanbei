@@ -16,6 +16,8 @@ services:
       ]
     volumes:
       - db_data:/var/lib/mysql
+      # 首次空库时自动执行本目录下 .sql（将完整备份命名为 init.sql 放入此处，见 README）
+      - ./sql/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD:-1234}"]
       interval: 10s
