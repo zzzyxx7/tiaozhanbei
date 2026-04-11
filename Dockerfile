@@ -11,6 +11,8 @@ RUN apk add --no-cache maven && \
 
 FROM eclipse-temurin:21-jre-alpine
 
+RUN apk add --no-cache curl
+
 WORKDIR /app
 
 ENV JAVA_OPTS=""

@@ -1,0 +1,31 @@
+# Docker / 服务器部署：使用服务名 db、redis，勿用 127.0.0.1
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+rule:
+  server:
+    port: 8080
+  datasource:
+    url: jdbc:mysql://db:3306/rule_engine_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: ${MYSQL_ROOT_PASSWORD:1234}
+  redis:
+    host: redis
+    port: 6379
+    password: ""
+    database: 0
+    timeout: 2000ms
+  ai:
+    prefill:
+      default-provider: deepseek
+      timeout-ms: 12000
+    deepseek:
+      base-url: https://api.deepseek.com
+      model: deepseek-chat
+      api-key: ${RULE_AI_DEEPSEEK_KEY:}
+    openai:
+      base-url: https://api.openai.com
+      model: gpt-4o-mini
+      api-key: ${RULE_AI_OPENAI_KEY:}

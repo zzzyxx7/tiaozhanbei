@@ -32,19 +32,15 @@ services:
       redis:
         condition: service_started
     environment:
+      # 必须激活 docker 配置，否则会加载 application-dev.yml 里的 127.0.0.1，容器内连不上 MySQL/Redis
+      SPRING_PROFILES_ACTIVE: docker
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-1234}"
       RULE_SERVER_PORT: "8080"
-      RULE_DATASOURCE_URL: "jdbc:mysql://db:3306/rule_engine_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
-      RULE_DATASOURCE_USERNAME: "root"
-      RULE_DATASOURCE_PASSWORD: "${MYSQL_ROOT_PASSWORD:-1234}"
-      RULE_REDIS_HOST: "redis"
-      RULE_REDIS_PORT: "6379"
-      RULE_REDIS_PASSWORD: ""
-      RULE_REDIS_DATABASE: "0"
       TZ: "Asia/Shanghai"
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/v3/api-docs"]
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8080/v3/api-docs >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
