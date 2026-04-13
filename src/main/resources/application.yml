@@ -20,6 +20,11 @@ spring:
       password: ${rule.redis.password:}
       database: ${rule.redis.database:0}
       timeout: ${rule.redis.timeout:2000ms}
+  rabbitmq:
+    host: ${rule.mq.host:mq}
+    port: ${rule.mq.port:5672}
+    username: ${rule.mq.user:${MQ_USER:zkj}}
+    password: ${rule.mq.password:${MQ_PASSWORD:123456}}
 
 server:
   port: ${rule.server.port:8080}
@@ -37,6 +42,9 @@ ai:
   prefill:
     default-provider: ${rule.ai.prefill.default-provider:deepseek}
     timeout-ms: ${rule.ai.prefill.timeout-ms:12000}
+    debounce-ms: ${rule.ai.prefill.debounce-ms:8000}
+    async:
+      task-ttl-seconds: ${rule.ai.prefill.async.task-ttl-seconds:3600}
   deepseek:
     base-url: ${rule.ai.deepseek.base-url:https://api.deepseek.com}
     model: ${rule.ai.deepseek.model:deepseek-chat}

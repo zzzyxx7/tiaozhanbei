@@ -305,6 +305,21 @@ Quick check:
 curl "http://8.136.46.14:8080/api/rule/causes"
 ```
 
+### AI 预填（异步可选）
+
+同步接口（兼容，直接返回结果）：
+
+- `POST /api/rule/ai-prefill`
+
+异步接口（推荐用于调用耗时较长场景：先提交任务，再轮询结果）：
+
+- `POST /api/rule/ai-prefill/submit` → 返回 `taskId`
+- `GET /api/rule/ai-prefill/task/{taskId}` → 返回 `queued/running/success/failed`
+
+RabbitMQ 管理台（若 compose 暴露 15672 端口）：
+
+- `http://<server-ip>:15672`（默认用户/密码见 `.env` 的 `MQ_USER`/`MQ_PASSWORD`）
+
 ## 8) Give frontend these URLs
 
 - Base URL: `http://8.136.46.14:8080`

@@ -33,12 +33,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      mq:
+        condition: service_healthy
     environment:
       # 必须激活 docker 配置，否则会加载 application-dev.yml 里的 127.0.0.1，容器内连不上 MySQL/Redis
       SPRING_PROFILES_ACTIVE: docker
       MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-1234}"
       # 与 application-docker.yml 中 ${RULE_AI_DEEPSEEK_KEY:} 对应；在仓库根目录 .env 中配置
       RULE_AI_DEEPSEEK_KEY: "${RULE_AI_DEEPSEEK_KEY:-}"
+      RULE_AI_PREFILL_DEBOUNCE_MS: "${RULE_AI_PREFILL_DEBOUNCE_MS:-8000}"
+      RULE_AI_PREFILL_ASYNC_TASK_TTL_SECONDS: "${RULE_AI_PREFILL_ASYNC_TASK_TTL_SECONDS:-3600}"
+      MQ_USER: "${MQ_USER:-zkj}"
+      MQ_PASSWORD: "${MQ_PASSWORD:-123456}"
       WECHAT_MINIAPP_APP_ID: "${WECHAT_MINIAPP_APP_ID:-}"
       WECHAT_MINIAPP_SECRET: "${WECHAT_MINIAPP_SECRET:-}"
       RULE_AUTH_JWT_SECRET: "${RULE_AUTH_JWT_SECRET:-}"
@@ -64,7 +70,27 @@ services:
     volumes:
       - redis_data:/data
 
+  mq:
+    image: rabbitmq:3-management-alpine
+    container_name: rule-mq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: "${MQ_USER:-zkj}"
+      RABBITMQ_DEFAULT_PASS: "${MQ_PASSWORD:-123456}"
+      TZ: "Asia/Shanghai"
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - mq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   db_data:
   redis_data:
+  mq_data:
 
