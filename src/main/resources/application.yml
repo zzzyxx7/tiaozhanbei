@@ -1,6 +1,9 @@
 spring:
   application:
     name: rule-backend
+  # IDEA / 本地：自动加载项目根目录 .env（与 Docker Compose 同源），使 RULE_AI_DEEPSEEK_KEY 等生效；文件不存在则忽略。
+  config:
+    import: optional:file:.env[.properties]
   profiles:
     active: dev
 

@@ -1,6 +1,8 @@
 package com.shangfaduxing.rulebackend.service;
 
 import com.shangfaduxing.rulebackend.model.Law;
+import com.shangfaduxing.rulebackend.model.CauseCategory;
+import com.shangfaduxing.rulebackend.model.CauseItem;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -8,6 +10,13 @@ import java.util.*;
 
 @Service
 public class CauseAssetDbService {
+
+    /**
+     * 不在 rule_cause 表中、但历史上或前端仍可能传入的案由码 → 直接映射问卷（与 rule_questionnaire 一致）。
+     */
+    private static final Map<String, String> PREFILL_QUESTIONNAIRE_ALIASES = Map.of(
+            "divorce_property", "questionnaire_divorce_property_split"
+    );
 
     private final JdbcTemplate jdbcTemplate;
     private final QuestionnaireDbService questionnaireDbService;
@@ -30,6 +39,36 @@ public class CauseAssetDbService {
         }
     }
 
+    /** 预填：支持 rule_cause 中的案由，以及 PREFILL_QUESTIONNAIRE_ALIASES 中的别名案由。 */
+    public boolean supportsPrefill(String causeCode) {
+        if (causeCode == null || causeCode.isBlank()) {
+            return false;
+        }
+        return supports(causeCode) || PREFILL_QUESTIONNAIRE_ALIASES.containsKey(causeCode);
+    }
+
+    /**
+     * 预填拉问卷：先按 rule_cause；若无题目且存在别名，则按别名问卷 ID 加载（如 divorce_property → 离婚房产分割问卷）。
+     */
+    public List<Map<String, Object>> getQuestionGroupsForPrefill(String causeCode) {
+        if (causeCode == null || causeCode.isBlank()) {
+            return List.of();
+        }
+        List<Map<String, Object>> groups = getQuestionGroups(causeCode);
+        if (!groups.isEmpty()) {
+            return groups;
+        }
+        String qid = PREFILL_QUESTIONNAIRE_ALIASES.get(causeCode);
+        if (qid != null && !qid.isBlank()) {
+            try {
+                return questionnaireDbService.getQuestionGroups(qid);
+            } catch (Exception e) {
+                return List.of();
+            }
+        }
+        return List.of();
+    }
+
     public List<Map<String, Object>> listEnabledCauses() {
         try {
             return jdbcTemplate.query(
@@ -44,6 +83,93 @@ public class CauseAssetDbService {
             );
         } catch (Exception e) {
             return List.of();
+        }
+    }
+
+    public List<CauseCategory> listEnabledCategoriesTree() {
+        try {
+            List<CauseCategory> categories = jdbcTemplate.query(
+                    "SELECT category_code, category_name " +
+                            "FROM rule_cause_category WHERE enabled=1 ORDER BY sort_order, category_code",
+                    (rs, rowNum) -> new CauseCategory(
+                            rs.getString("category_code"),
+                            rs.getString("category_name"),
+                            new ArrayList<>()
+                    )
+            );
+
+            Map<String, CauseCategory> byCode = new LinkedHashMap<>();
+            for (CauseCategory c : categories) {
+                byCode.put(c.getCategoryCode(), c);
+            }
+
+            List<Map<String, Object>> causeWithCategory = jdbcTemplate.query(
+                    "SELECT category_code, cause_code, cause_name, questionnaire_id " +
+                            "FROM rule_cause WHERE enabled=1 ORDER BY category_code, cause_code",
+                    (rs, rowNum) -> {
+                        Map<String, Object> m = new HashMap<>();
+                        m.put("categoryCode", rs.getString("category_code"));
+                        m.put("causeCode", rs.getString("cause_code"));
+                        m.put("causeName", rs.getString("cause_name"));
+                        m.put("questionnaireId", rs.getString("questionnaire_id"));
+                        return m;
+                    }
+            );
+
+            for (Map<String, Object> m : causeWithCategory) {
+                String categoryCode = String.valueOf(m.getOrDefault("categoryCode", "other"));
+                String causeCode = String.valueOf(m.getOrDefault("causeCode", ""));
+                String causeName = String.valueOf(m.getOrDefault("causeName", ""));
+                String questionnaireId = String.valueOf(m.getOrDefault("questionnaireId", ""));
+
+                CauseCategory cat = byCode.get(categoryCode);
+                if (cat == null) {
+                    cat = byCode.computeIfAbsent("other", k -> new CauseCategory("other", "其他", new ArrayList<>()));
+                }
+                cat.getCauses().add(new CauseItem(causeCode, causeName, questionnaireId));
+            }
+
+            // 返回顺序：按大类 sort_order，其下按 cause_code
+            for (CauseCategory cat : byCode.values()) {
+                cat.getCauses().sort(Comparator.comparing(CauseItem::getCauseCode, Comparator.nullsLast(String::compareTo)));
+            }
+            return new ArrayList<>(byCode.values());
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    public CauseCategory getEnabledCategory(String categoryCode) {
+        if (categoryCode == null || categoryCode.isBlank()) {
+            return null;
+        }
+        try {
+            List<CauseCategory> cats = jdbcTemplate.query(
+                    "SELECT category_code, category_name " +
+                            "FROM rule_cause_category WHERE enabled=1 AND category_code=? LIMIT 1",
+                    (rs, rowNum) -> new CauseCategory(
+                            rs.getString("category_code"),
+                            rs.getString("category_name"),
+                            new ArrayList<>()
+                    ),
+                    categoryCode
+            );
+            if (cats.isEmpty()) return null;
+            CauseCategory cat = cats.get(0);
+            List<CauseItem> causes = jdbcTemplate.query(
+                    "SELECT cause_code, cause_name, questionnaire_id " +
+                            "FROM rule_cause WHERE enabled=1 AND category_code=? ORDER BY cause_code",
+                    (rs, rowNum) -> new CauseItem(
+                            rs.getString("cause_code"),
+                            rs.getString("cause_name"),
+                            rs.getString("questionnaire_id")
+                    ),
+                    categoryCode
+            );
+            cat.setCauses(causes);
+            return cat;
+        } catch (Exception e) {
+            return null;
         }
     }
 

@@ -1,5 +1,6 @@
 package com.shangfaduxing.rulebackend.service;
 
+import com.shangfaduxing.rulebackend.model.CauseCategory;
 import com.shangfaduxing.rulebackend.model.JudgeResponse;
 import com.shangfaduxing.rulebackend.model.Step2EvidenceChecklistItem;
 import com.shangfaduxing.rulebackend.model.Step2FactChecklistItem;
@@ -86,6 +87,14 @@ public class RuleCenterService {
         return causeAssetDbService.listEnabledCauses();
     }
 
+    public List<CauseCategory> categories() {
+        return causeAssetDbService.listEnabledCategoriesTree();
+    }
+
+    public CauseCategory category(String categoryCode) {
+        return causeAssetDbService.getEnabledCategory(categoryCode);
+    }
+
     public List<Map<String, Object>> questionnaire(String causeCode, String questionnaireId) {
         String normalized = normalizeCauseCode(causeCode);
         return causeAssetDbService.getQuestionGroups(normalized);
@@ -97,4 +106,5 @@ public class RuleCenterService {
         }
         return causeCode;
     }
+
 }

@@ -29,3 +29,13 @@ rule:
       base-url: https://api.openai.com
       model: gpt-4o-mini
       api-key: ${RULE_AI_OPENAI_KEY:}
+
+  wechat:
+    miniapp:
+      app-id: ${WECHAT_MINIAPP_APP_ID:}
+      secret: ${WECHAT_MINIAPP_SECRET:}
+
+  auth:
+    jwt:
+      secret: ${RULE_AUTH_JWT_SECRET:}
+      expire-seconds: ${RULE_AUTH_JWT_EXPIRE_SECONDS:604800}

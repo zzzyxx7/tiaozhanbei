@@ -1,4 +1,6 @@
 target
+.env
+.env.*
 rule_engine_db_init.sql
 sql/docker-entrypoint-initdb.d/init.sql
 .git
