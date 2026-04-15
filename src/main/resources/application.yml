@@ -21,8 +21,8 @@ spring:
       database: ${rule.redis.database:0}
       timeout: ${rule.redis.timeout:2000ms}
   rabbitmq:
-    host: ${rule.mq.host:mq}
-    port: ${rule.mq.port:5672}
+    host: ${rule.mq.host:127.0.0.1}
+    port: ${rule.mq.port:5673}
     username: ${rule.mq.user:${MQ_USER:zkj}}
     password: ${rule.mq.password:${MQ_PASSWORD:123456}}
 

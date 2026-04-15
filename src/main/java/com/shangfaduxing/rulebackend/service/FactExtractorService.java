@@ -15,6 +15,10 @@ public class FactExtractorService {
     private static final String CAUSE_POST_DIVORCE = "post_divorce_property";
     private static final String CAUSE_LABOR_INJURY = "labor_injury_compensation";
     private static final String CAUSE_LABOR_OVERTIME = "labor_overtime_pay";
+    private static final String CAUSE_PROPERTY_DISPUTE = "property_dispute";
+    private static final String CAUSE_CHILD_SUPPORT = "child_support_dispute";
+    private static final String CAUSE_SUPPORT = "support_dispute";
+    private static final String CAUSE_INHERIT = "inherit_dispute";
 
     public Map<String, Object> extractByCause(String causeCode, Map<String, Object> answers) {
         if (CAUSE_DIVORCE.equals(causeCode)) {
@@ -41,7 +45,26 @@ public class FactExtractorService {
         if (CAUSE_LABOR_OVERTIME.equals(causeCode)) {
             return extractLaborOvertime(answers);
         }
-        return extractLaborTermination(answers);
+        if (CAUSE_PROPERTY_DISPUTE.equals(causeCode)) {
+            return extractPropertyDispute(answers);
+        }
+        if (CAUSE_CHILD_SUPPORT.equals(causeCode)) {
+            return extractChildSupport(answers);
+        }
+        if (CAUSE_SUPPORT.equals(causeCode)) {
+            return extractSupport(answers);
+        }
+        if (CAUSE_INHERIT.equals(causeCode)) {
+            return extractInherit(answers);
+        }
+        // 兜底：尽量把 answers 原样作为 facts（布尔/数字保持），避免新案由没加 extractor 时全不命中
+        Map<String, Object> facts = new LinkedHashMap<>();
+        Map<String, Object> safeAnswers = answers == null ? Map.of() : answers;
+        for (Map.Entry<String, Object> e : safeAnswers.entrySet()) {
+            if (e.getKey() == null || e.getKey().isBlank()) continue;
+            facts.put(e.getKey().trim(), e.getValue());
+        }
+        return facts;
     }
 
     private Map<String, Object> extractBetrothal(Map<String, Object> answers) {
@@ -57,6 +80,78 @@ public class FactExtractorService {
         putB(facts, safeAnswers, "存在法定返还情形");
         facts.put("彩礼金额", numberOr0(safeAnswers.get("彩礼金额")));
         facts.put("共同生活月数", intOr0(safeAnswers.get("共同生活月数")));
+        return facts;
+    }
+
+    private Map<String, Object> extractPropertyDispute(Map<String, Object> answers) {
+        Map<String, Object> facts = new LinkedHashMap<>();
+        Map<String, Object> safeAnswers = answers == null ? Map.of() : answers;
+        putB(facts, safeAnswers, "存在彩礼或财产给付");
+        // choice：是否已办理结婚登记（未登记/已登记）
+        Object reg = safeAnswers.get("是否已办理结婚登记");
+        if (reg != null) facts.put("是否已办理结婚登记", String.valueOf(reg));
+        putB(facts, safeAnswers, "是否已共同生活");
+        putB(facts, safeAnswers, "给付是否导致生活困难");
+        putB(facts, safeAnswers, "是否存在法定返还情形");
+        facts.put("给付金额", numberOr0(safeAnswers.get("给付金额")));
+        facts.put("共同生活月数", intOr0(safeAnswers.get("共同生活月数")));
+        Object t = safeAnswers.get("财物类型");
+        if (t != null) facts.put("财物类型", String.valueOf(t));
+        putB(facts, safeAnswers, "有转账或收条");
+        putB(facts, safeAnswers, "有共同生活证据");
+        putB(facts, safeAnswers, "有生活困难证明");
+        return facts;
+    }
+
+    private Map<String, Object> extractChildSupport(Map<String, Object> answers) {
+        Map<String, Object> facts = new LinkedHashMap<>();
+        Map<String, Object> safeAnswers = answers == null ? Map.of() : answers;
+        putB(facts, safeAnswers, "存在亲子关系");
+        Object custody = safeAnswers.get("目前抚养关系明确");
+        if (custody != null) facts.put("目前抚养关系明确", String.valueOf(custody));
+        putB(facts, safeAnswers, "对方未支付抚养费");
+        putB(facts, safeAnswers, "是否有离婚协议或判决");
+        facts.put("约定抚养费金额", numberOr0(safeAnswers.get("约定抚养费金额")));
+        facts.put("孩子实际月支出", numberOr0(safeAnswers.get("孩子实际月支出")));
+        putB(facts, safeAnswers, "对方收入水平大致明确");
+        putB(facts, safeAnswers, "是否存在重大支出变化");
+        putB(facts, safeAnswers, "是否主张变更抚养关系");
+        putB(facts, safeAnswers, "变更原因属于法定情形");
+        putB(facts, safeAnswers, "孩子已满八周岁");
+        putB(facts, safeAnswers, "有利于孩子成长证据");
+        return facts;
+    }
+
+    private Map<String, Object> extractSupport(Map<String, Object> answers) {
+        Map<String, Object> facts = new LinkedHashMap<>();
+        Map<String, Object> safeAnswers = answers == null ? Map.of() : answers;
+        putB(facts, safeAnswers, "存在赡养关系");
+        putB(facts, safeAnswers, "被赡养人生活困难");
+        putB(facts, safeAnswers, "赡养人拒绝履行");
+        Object mode = safeAnswers.get("赡养方式争议");
+        if (mode != null) facts.put("赡养方式争议", String.valueOf(mode));
+        facts.put("被赡养人月基本支出", numberOr0(safeAnswers.get("被赡养人月基本支出")));
+        putB(facts, safeAnswers, "赡养人收入能力大致明确");
+        putB(facts, safeAnswers, "是否存在多名赡养人");
+        putB(facts, safeAnswers, "有亲属关系证明");
+        putB(facts, safeAnswers, "有医疗或失能证明");
+        putB(facts, safeAnswers, "有拒绝赡养证据");
+        return facts;
+    }
+
+    private Map<String, Object> extractInherit(Map<String, Object> answers) {
+        Map<String, Object> facts = new LinkedHashMap<>();
+        Map<String, Object> safeAnswers = answers == null ? Map.of() : answers;
+        putB(facts, safeAnswers, "继承已经开始");
+        putB(facts, safeAnswers, "遗产范围大致明确");
+        putB(facts, safeAnswers, "继承人范围存在争议");
+        putB(facts, safeAnswers, "是否存在第一顺序继承人");
+        putB(facts, safeAnswers, "是否存在代位继承情形");
+        putB(facts, safeAnswers, "是否存在继承份额争议");
+        putB(facts, safeAnswers, "是否存在遗嘱");
+        putB(facts, safeAnswers, "遗嘱形式是否合法");
+        putB(facts, safeAnswers, "是否存在遗嘱效力争议");
+        putB(facts, safeAnswers, "有遗嘱原件或保管线索");
         return facts;
     }
 
@@ -224,6 +319,7 @@ public class FactExtractorService {
         return facts;
     }
 
+    @SuppressWarnings("unused")
     private Map<String, Object> extractLaborTermination(Map<String, Object> answers) {
         Map<String, Object> facts = new LinkedHashMap<>();
         Map<String, Object> safeAnswers = answers == null ? Map.of() : answers;

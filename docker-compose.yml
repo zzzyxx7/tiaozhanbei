@@ -79,8 +79,8 @@ services:
       RABBITMQ_DEFAULT_PASS: "${MQ_PASSWORD:-123456}"
       TZ: "Asia/Shanghai"
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5673:5672"
+      - "15673:15672"
     volumes:
       - mq_data:/var/lib/rabbitmq
     healthcheck:

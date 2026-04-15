@@ -1,10 +1,12 @@
 package com.shangfaduxing.rulebackend.controller;
 
 import com.shangfaduxing.rulebackend.model.CauseCategory;
+import com.shangfaduxing.rulebackend.model.CauseItem;
 import com.shangfaduxing.rulebackend.service.RuleCenterService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -37,6 +39,14 @@ public class CauseController {
     @GetMapping("/categories/{categoryCode}")
     public CauseCategory category(@PathVariable("categoryCode") String categoryCode) {
         return ruleCenterService.category(categoryCode);
+    }
+
+    /**
+     * 常见案由（稳定排序），供前端“常见案由 >>>”直接渲染。
+     */
+    @GetMapping("/common-causes")
+    public List<CauseItem> commonCauses(@RequestParam("categoryCode") String categoryCode) {
+        return ruleCenterService.commonCauses(categoryCode);
     }
 }
 

@@ -15,12 +15,44 @@ import java.net.http.HttpResponse;
 import java.text.Normalizer;
 import java.time.Duration;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class AiPrefillService {
+    private static final Pattern NUMBER_WITH_UNIT_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*(万|千|元|块|w|W)?");
+    private static final Pattern CHINESE_WORD_PATTERN = Pattern.compile("[\\u4e00-\\u9fa5]{2,}");
+    private static final String CAUSE_PROPERTY_DISPUTE = "property_dispute";
+    private static final String CAUSE_DIVORCE_PROPERTY = "divorce_property";
+    private static final Set<String> MARRIAGE_CAUSE_CODES = Set.of(
+            "divorce_dispute",
+            "divorce_property",
+            "post_divorce_property",
+            "child_support_dispute",
+            "support_dispute",
+            "inherit_dispute",
+            "betrothal_property",
+            CAUSE_PROPERTY_DISPUTE
+    );
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final CauseAssetDbService causeAssetDbService;
+    private static final Set<String> BOOLEAN_TRUE_TOKENS = Set.of("true", "1", "yes", "y", "是", "有", "已", "存在", "办理", "可以");
+    private static final Set<String> BOOLEAN_FALSE_TOKENS = Set.of("false", "0", "no", "n", "否", "无", "未", "不存在", "没有", "不可以");
+
+    private static class QuestionFieldMeta {
+        private final String inputType;
+        private final String label;
+        private final Set<String> optionValues;
+        private final Map<String, String> optionLabelToValue;
+
+        private QuestionFieldMeta(String inputType, String label, Set<String> optionValues, Map<String, String> optionLabelToValue) {
+            this.inputType = inputType;
+            this.label = label;
+            this.optionValues = optionValues;
+            this.optionLabelToValue = optionLabelToValue;
+        }
+    }
 
     @Value("${ai.prefill.default-provider:deepseek}")
     private String defaultProvider;
@@ -56,7 +88,7 @@ public class AiPrefillService {
             resp.setMergedAnswers(request == null || request.getExistingAnswers() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(request.getExistingAnswers()));
             return resp;
         }
-        String causeCode = request.getCauseCode().trim();
+        String causeCode = normalizeCauseCode(request.getCauseCode());
         if (!causeAssetDbService.supportsPrefill(causeCode)) {
             resp.setSuccess(false);
             resp.setMessage("未知案由或暂不支持预填: " + causeCode);
@@ -64,7 +96,16 @@ public class AiPrefillService {
             resp.setMergedAnswers(copyExistingSafe(request.getExistingAnswers()));
             return resp;
         }
-        List<String> allowedKeys = resolveAllowedQuestionKeys(request, causeCode);
+        List<Map<String, Object>> groupsForSchema = null;
+        if (request.getTargetKeys() == null || request.getTargetKeys().isEmpty()) {
+            try {
+                groupsForSchema = causeAssetDbService.getQuestionGroupsForPrefill(causeCode);
+            } catch (Exception ignored) {
+                groupsForSchema = null;
+            }
+        }
+        List<String> allowedKeys = resolveAllowedQuestionKeys(request, causeCode, groupsForSchema);
+        Map<String, QuestionFieldMeta> fieldMetaMap = buildQuestionMetaMap(groupsForSchema);
         boolean keysFromClient = request.getTargetKeys() != null && !request.getTargetKeys().isEmpty();
         if (!keysFromClient && allowedKeys.isEmpty()) {
             resp.setSuccess(false);
@@ -76,33 +117,54 @@ public class AiPrefillService {
 
         String provider = isBlank(request.getProvider()) ? defaultProvider : request.getProvider().trim().toLowerCase();
         try {
-            List<AiSuggestionItem> items = callProvider(provider, request, causeCode, allowedKeys);
-            Map<String, Object> merged = mergeAnswers(request.getExistingAnswers(), items, allowedKeys);
+            List<AiSuggestionItem> items = callProvider(provider, request, causeCode, allowedKeys, groupsForSchema);
+            List<AiSuggestionItem> normalizedItems = normalizeSuggestionValues(items, fieldMetaMap);
+            List<AiSuggestionItem> enhancedItems = augmentNumericSuggestions(request.getUserText(), normalizedItems, allowedKeys, fieldMetaMap);
+            List<AiSuggestionItem> filteredItems = filterSuggestionsByRelevance(causeCode, request.getUserText(), enhancedItems, fieldMetaMap);
+            Map<String, Object> merged = mergeAnswers(request.getExistingAnswers(), filteredItems, allowedKeys, fieldMetaMap);
             resp.setSuccess(true);
             resp.setProvider(provider);
             resp.setFallback(false);
-            resp.setSuggestions(items);
+            resp.setSuggestions(filteredItems);
             resp.setMergedAnswers(merged);
             resp.setMessage("AI 预填完成");
             return resp;
         } catch (Exception e) {
             List<AiSuggestionItem> fallbackItems = keywordFallback(causeCode, request.getUserText(), allowedKeys);
-            Map<String, Object> merged = mergeAnswers(request.getExistingAnswers(), fallbackItems, allowedKeys);
+            List<AiSuggestionItem> normalizedItems = normalizeSuggestionValues(fallbackItems, fieldMetaMap);
+            List<AiSuggestionItem> enhancedItems = augmentNumericSuggestions(request.getUserText(), normalizedItems, allowedKeys, fieldMetaMap);
+            List<AiSuggestionItem> filteredItems = filterSuggestionsByRelevance(causeCode, request.getUserText(), enhancedItems, fieldMetaMap);
+            Map<String, Object> merged = mergeAnswers(request.getExistingAnswers(), filteredItems, allowedKeys, fieldMetaMap);
             resp.setSuccess(true);
             resp.setProvider(provider);
             resp.setFallback(true);
-            resp.setSuggestions(fallbackItems);
+            resp.setSuggestions(filteredItems);
             resp.setMergedAnswers(merged);
             resp.setMessage("AI 调用失败，已切换规则关键词预填: " + e.getMessage());
             return resp;
         }
     }
 
+    private String normalizeCauseCode(String raw) {
+        if (raw == null) return "";
+        String c = raw.trim();
+        if (CAUSE_PROPERTY_DISPUTE.equals(c)) {
+            return CAUSE_DIVORCE_PROPERTY;
+        }
+        return c;
+    }
+
     private static Map<String, Object> copyExistingSafe(Map<String, Object> existing) {
         return existing == null ? new LinkedHashMap<>() : new LinkedHashMap<>(existing);
     }
 
-    private List<AiSuggestionItem> callProvider(String provider, AiPrefillRequest request, String causeCode, List<String> allowedKeys) throws Exception {
+    private List<AiSuggestionItem> callProvider(
+            String provider,
+            AiPrefillRequest request,
+            String causeCode,
+            List<String> allowedKeys,
+            List<Map<String, Object>> groupsForSchema
+    ) throws Exception {
         String apiKey;
         String model;
         String baseUrl;
@@ -119,7 +181,7 @@ public class AiPrefillService {
             throw new IllegalStateException("缺少 API Key");
         }
 
-        String prompt = buildPrompt(request, causeCode, allowedKeys);
+        String prompt = buildPrompt(request, causeCode, allowedKeys, groupsForSchema);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
         body.put("temperature", 0.1);
@@ -188,7 +250,11 @@ public class AiPrefillService {
     /**
      * 客户端可传 targetKeys；未传时按 causeCode 从库中拉取问卷题目的 question_key，与 GET /questionnaire 一致。
      */
-    private List<String> resolveAllowedQuestionKeys(AiPrefillRequest request, String causeCode) {
+    private List<String> resolveAllowedQuestionKeys(
+            AiPrefillRequest request,
+            String causeCode,
+            List<Map<String, Object>> groupsForSchema
+    ) {
         if (request.getTargetKeys() != null && !request.getTargetKeys().isEmpty()) {
             List<String> out = new ArrayList<>();
             for (String k : request.getTargetKeys()) {
@@ -198,12 +264,10 @@ public class AiPrefillService {
             }
             return out;
         }
-        try {
-            List<Map<String, Object>> groups = causeAssetDbService.getQuestionGroupsForPrefill(causeCode);
-            return collectQuestionKeysInOrder(groups);
-        } catch (Exception e) {
+        if (groupsForSchema == null) {
             return List.of();
         }
+        return collectQuestionKeysInOrder(groupsForSchema);
     }
 
     private List<String> collectQuestionKeysInOrder(List<Map<String, Object>> groups) {
@@ -234,8 +298,8 @@ public class AiPrefillService {
     }
 
     @SuppressWarnings("unchecked")
-    private List<Map<String, String>> buildQuestionSchemaForPrompt(List<Map<String, Object>> groups) {
-        List<Map<String, String>> schema = new ArrayList<>();
+    private List<Map<String, Object>> buildQuestionSchemaForPrompt(List<Map<String, Object>> groups) {
+        List<Map<String, Object>> schema = new ArrayList<>();
         if (groups == null) {
             return schema;
         }
@@ -253,14 +317,81 @@ public class AiPrefillService {
                 if (key.isBlank()) {
                     continue;
                 }
-                Map<String, String> row = new LinkedHashMap<>();
+                Map<String, Object> row = new LinkedHashMap<>();
                 row.put("key", key);
                 row.put("inputType", Objects.toString(q.get("type"), ""));
                 row.put("label", Objects.toString(q.get("text"), ""));
+                row.put("unit", Objects.toString(q.get("unit"), ""));
+                if (q.get("options") instanceof List<?> os && !os.isEmpty()) {
+                    List<Map<String, String>> opts = new ArrayList<>();
+                    for (Object oo : os) {
+                        if (!(oo instanceof Map<?, ?> om)) {
+                            continue;
+                        }
+                        String ov = Objects.toString(om.get("value"), "");
+                        String ol = Objects.toString(om.get("label"), "");
+                        if (ov.isBlank() && ol.isBlank()) {
+                            continue;
+                        }
+                        Map<String, String> opt = new LinkedHashMap<>();
+                        opt.put("value", ov);
+                        opt.put("label", ol);
+                        opts.add(opt);
+                    }
+                    if (!opts.isEmpty()) {
+                        row.put("options", opts);
+                    }
+                }
                 schema.add(row);
             }
         }
         return schema;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, QuestionFieldMeta> buildQuestionMetaMap(List<Map<String, Object>> groups) {
+        Map<String, QuestionFieldMeta> out = new LinkedHashMap<>();
+        if (groups == null) {
+            return out;
+        }
+        for (Map<String, Object> g : groups) {
+            Object qs = g.get("questions");
+            if (!(qs instanceof List)) {
+                continue;
+            }
+            for (Object qo : (List<?>) qs) {
+                if (!(qo instanceof Map)) {
+                    continue;
+                }
+                Map<String, Object> q = (Map<String, Object>) qo;
+                String key = Objects.toString(q.get("key"), "").trim();
+                if (key.isBlank()) {
+                    continue;
+                }
+                String inputType = Objects.toString(q.get("type"), "").trim().toLowerCase(Locale.ROOT);
+                Set<String> optionValues = new LinkedHashSet<>();
+                Map<String, String> optionLabelToValue = new LinkedHashMap<>();
+                if (q.get("options") instanceof List<?> os) {
+                    for (Object oo : os) {
+                        if (!(oo instanceof Map<?, ?> om)) {
+                            continue;
+                        }
+                        String ov = Objects.toString(om.get("value"), "").trim();
+                        String ol = Objects.toString(om.get("label"), "").trim();
+                        if (!ov.isBlank()) {
+                            optionValues.add(ov);
+                            optionLabelToValue.put(normalizeOptionToken(ov), ov);
+                        }
+                        if (!ol.isBlank() && !ov.isBlank()) {
+                            optionLabelToValue.put(normalizeOptionToken(ol), ov);
+                        }
+                    }
+                }
+                String label = Objects.toString(q.get("text"), "").trim();
+                out.put(key, new QuestionFieldMeta(inputType, label, optionValues, optionLabelToValue));
+            }
+        }
+        return out;
     }
 
     private Map<String, String> buildNormalizedToCanonicalMap(List<String> allowedKeys) {
@@ -332,21 +463,17 @@ public class AiPrefillService {
         return normToCanon.get(norm);
     }
 
-    private String buildPrompt(AiPrefillRequest request, String causeCode, List<String> allowedKeys) throws Exception {
+    private String buildPrompt(
+            AiPrefillRequest request,
+            String causeCode,
+            List<String> allowedKeys,
+            List<Map<String, Object>> groupsForSchema
+    ) throws Exception {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("causeCode", causeCode);
         payload.put("userText", request.getUserText());
         payload.put("existingAnswers", request.getExistingAnswers() == null ? Map.of() : request.getExistingAnswers());
         payload.put("targetKeys", request.getTargetKeys() == null ? List.of() : request.getTargetKeys());
-
-        List<Map<String, Object>> groupsForSchema = null;
-        if (request.getTargetKeys() == null || request.getTargetKeys().isEmpty()) {
-            try {
-                groupsForSchema = causeAssetDbService.getQuestionGroupsForPrefill(causeCode);
-            } catch (Exception ignored) {
-                groupsForSchema = null;
-            }
-        }
 
         if (allowedKeys != null && !allowedKeys.isEmpty()) {
             payload.put("allowedQuestionKeys", allowedKeys);
@@ -396,7 +523,12 @@ public class AiPrefillService {
         return out;
     }
 
-    private Map<String, Object> mergeAnswers(Map<String, Object> existing, List<AiSuggestionItem> items, List<String> allowedKeys) {
+    private Map<String, Object> mergeAnswers(
+            Map<String, Object> existing,
+            List<AiSuggestionItem> items,
+            List<String> allowedKeys,
+            Map<String, QuestionFieldMeta> fieldMetaMap
+    ) {
         Map<String, Object> merged = new LinkedHashMap<>();
         Map<String, String> normToCanon = (allowedKeys == null || allowedKeys.isEmpty())
                 ? null
@@ -413,7 +545,7 @@ public class AiPrefillService {
                 } else {
                     String canon = resolveCanonicalKey(k, allowedKeys, normToCanon);
                     if (canon != null) {
-                        merged.put(canon, e.getValue());
+                        merged.put(canon, normalizeValueByFieldMeta(canon, e.getValue(), fieldMetaMap));
                     }
                 }
             }
@@ -424,11 +556,410 @@ public class AiPrefillService {
                     continue;
                 }
                 if (normToCanon == null || resolveCanonicalKey(i.getKey(), allowedKeys, normToCanon) != null) {
-                    merged.put(i.getKey(), i.getValue());
+                    merged.put(i.getKey(), normalizeValueByFieldMeta(i.getKey(), i.getValue(), fieldMetaMap));
                 }
             }
         }
         return merged;
+    }
+
+    private List<AiSuggestionItem> normalizeSuggestionValues(List<AiSuggestionItem> items, Map<String, QuestionFieldMeta> fieldMetaMap) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        List<AiSuggestionItem> out = new ArrayList<>(items.size());
+        for (AiSuggestionItem i : items) {
+            Object normalizedValue = normalizeValueByFieldMeta(i.getKey(), i.getValue(), fieldMetaMap);
+            out.add(new AiSuggestionItem(i.getKey(), normalizedValue, i.getConfidence(), i.getReason()));
+        }
+        return out;
+    }
+
+    private Object normalizeValueByFieldMeta(String key, Object rawValue, Map<String, QuestionFieldMeta> fieldMetaMap) {
+        if (key == null || fieldMetaMap == null || fieldMetaMap.isEmpty()) {
+            return rawValue;
+        }
+        QuestionFieldMeta meta = fieldMetaMap.get(key);
+        if (meta == null || meta.inputType == null || meta.inputType.isBlank()) {
+            return rawValue;
+        }
+        if ("boolean".equals(meta.inputType)) {
+            return normalizeBooleanValue(rawValue);
+        }
+        if ("number".equals(meta.inputType)) {
+            return normalizeNumberValue(rawValue);
+        }
+        if ("choice".equals(meta.inputType) || "select".equals(meta.inputType)) {
+            return normalizeChoiceValue(rawValue, meta);
+        }
+        return rawValue;
+    }
+
+    private List<AiSuggestionItem> filterSuggestionsByRelevance(
+            String causeCode,
+            String userText,
+            List<AiSuggestionItem> items,
+            Map<String, QuestionFieldMeta> fieldMetaMap
+    ) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        if (!isMarriageCause(causeCode)) {
+            return items;
+        }
+        String normalizedInput = normalizeOptionToken(userText == null ? "" : userText);
+        List<AiSuggestionItem> kept = new ArrayList<>();
+        for (AiSuggestionItem i : items) {
+            if (i == null || i.getKey() == null || i.getKey().isBlank()) {
+                continue;
+            }
+            if (isSuggestionRelevant(i, normalizedInput, fieldMetaMap.get(i.getKey()))) {
+                kept.add(i);
+            }
+        }
+        if (!kept.isEmpty()) {
+            return kept;
+        }
+        // 如果全部被过滤，保留一条最高置信度，避免前端完全无预填。
+        AiSuggestionItem best = null;
+        double bestConf = -1d;
+        for (AiSuggestionItem i : items) {
+            if (i == null) continue;
+            double conf = i.getConfidence() == null ? 0d : i.getConfidence();
+            if (best == null || conf > bestConf) {
+                best = i;
+                bestConf = conf;
+            }
+        }
+        return best == null ? List.of() : List.of(best);
+    }
+
+    private boolean isSuggestionRelevant(AiSuggestionItem item, String normalizedInput, QuestionFieldMeta meta) {
+        double confidence = item.getConfidence() == null ? 0d : item.getConfidence();
+        String keyNorm = normalizeOptionToken(item.getKey());
+        String valueNorm = normalizeOptionToken(item.getValue() == null ? "" : String.valueOf(item.getValue()));
+        String labelNorm = meta == null ? "" : normalizeOptionToken(meta.label);
+        if (meta != null && "number".equals(meta.inputType)) {
+            Object normalizedNumber = normalizeNumberValue(item.getValue());
+            if (normalizedNumber instanceof Number && confidence >= 0.6d) {
+                return true;
+            }
+        }
+        boolean hasDirectSignal = containsAny(normalizedInput, keyNorm, valueNorm, labelNorm);
+        boolean hasMarriageContext = containsAny(normalizedInput, "婚", "离婚", "夫妻", "子女", "抚养", "赡养", "财产", "房", "继承", "彩礼");
+
+        if (hasDirectSignal) {
+            return true;
+        }
+        if (meta != null && ("choice".equals(meta.inputType) || "select".equals(meta.inputType))) {
+            if (valueNorm != null && !valueNorm.isBlank() && containsAny(normalizedInput, valueNorm)) {
+                return true;
+            }
+            for (Map.Entry<String, String> e : meta.optionLabelToValue.entrySet()) {
+                if (!e.getKey().isBlank() && containsAny(normalizedInput, e.getKey())) {
+                    return true;
+                }
+            }
+        }
+        if (hasMarriageContext && confidence >= 0.72d) {
+            return true;
+        }
+        return confidence >= 0.85d;
+    }
+
+    private boolean isMarriageCause(String causeCode) {
+        if (causeCode == null || causeCode.isBlank()) {
+            return false;
+        }
+        if (MARRIAGE_CAUSE_CODES.contains(causeCode)) {
+            return true;
+        }
+        return MARRIAGE_CAUSE_CODES.contains(normalizeCauseCode(causeCode));
+    }
+
+    private Object normalizeChoiceValue(Object rawValue, QuestionFieldMeta meta) {
+        if (rawValue == null) {
+            return null;
+        }
+        String text = String.valueOf(rawValue).trim();
+        if (text.isBlank()) {
+            return text;
+        }
+        if (meta.optionValues.contains(text)) {
+            return text;
+        }
+        String normalized = normalizeOptionToken(text);
+        String direct = meta.optionLabelToValue.get(normalized);
+        if (direct != null && !direct.isBlank()) {
+            return direct;
+        }
+
+        if (containsAny(normalized, "贷款", "按揭", "房贷")) {
+            Object v = chooseOption(meta, "按揭");
+            if (v != null) return v;
+        }
+        if (containsAny(normalized, "全款", "一次性")) {
+            Object v = chooseOption(meta, "全款");
+            if (v != null) return v;
+        }
+        if (containsAny(normalized, "婚前")) {
+            Object v = chooseOption(meta, "婚前");
+            if (v != null) return v;
+        }
+        if (containsAny(normalized, "婚后")) {
+            Object v = chooseOption(meta, "婚后");
+            if (v != null) return v;
+        }
+
+        for (String ov : meta.optionValues) {
+            String on = normalizeOptionToken(ov);
+            if (normalized.contains(on) || on.contains(normalized)) {
+                return ov;
+            }
+        }
+        for (Map.Entry<String, String> e : meta.optionLabelToValue.entrySet()) {
+            String on = e.getKey();
+            if (normalized.contains(on) || on.contains(normalized)) {
+                return e.getValue();
+            }
+        }
+        return text;
+    }
+
+    private Object chooseOption(QuestionFieldMeta meta, String expected) {
+        if (meta.optionValues.contains(expected)) {
+            return expected;
+        }
+        return meta.optionLabelToValue.get(normalizeOptionToken(expected));
+    }
+
+    private Object normalizeNumberValue(Object rawValue) {
+        if (rawValue == null || rawValue instanceof Number) {
+            return rawValue;
+        }
+        String s = String.valueOf(rawValue).trim();
+        if (s.isBlank()) {
+            return rawValue;
+        }
+        try {
+            String t = s.replace(",", "").replace("，", "");
+            if (t.endsWith("万")) {
+                return Double.parseDouble(t.substring(0, t.length() - 1).trim()) * 10000d;
+            }
+            if (t.endsWith("千")) {
+                return Double.parseDouble(t.substring(0, t.length() - 1).trim()) * 1000d;
+            }
+            return Double.parseDouble(t);
+        } catch (Exception ignore) {
+            return rawValue;
+        }
+    }
+
+    private Object normalizeBooleanValue(Object rawValue) {
+        if (rawValue == null || rawValue instanceof Boolean) {
+            return rawValue;
+        }
+        String s = String.valueOf(rawValue).trim().toLowerCase(Locale.ROOT);
+        if (BOOLEAN_TRUE_TOKENS.contains(s)) {
+            return true;
+        }
+        if (BOOLEAN_FALSE_TOKENS.contains(s)) {
+            return false;
+        }
+        return rawValue;
+    }
+
+    private List<AiSuggestionItem> augmentNumericSuggestions(
+            String userText,
+            List<AiSuggestionItem> items,
+            List<String> allowedKeys,
+            Map<String, QuestionFieldMeta> fieldMetaMap
+    ) {
+        if (userText == null || userText.isBlank() || fieldMetaMap == null || fieldMetaMap.isEmpty()) {
+            return items == null ? List.of() : items;
+        }
+        List<AiSuggestionItem> base = items == null ? List.of() : items;
+        List<NumericCandidate> candidates = extractNumericCandidates(userText);
+        if (candidates.isEmpty()) {
+            return base;
+        }
+
+        Set<String> allowed = (allowedKeys == null || allowedKeys.isEmpty()) ? null : new HashSet<>(allowedKeys);
+        List<AiSuggestionItem> out = new ArrayList<>(base);
+        for (Map.Entry<String, QuestionFieldMeta> e : fieldMetaMap.entrySet()) {
+            String key = e.getKey();
+            QuestionFieldMeta meta = e.getValue();
+            if (meta == null || !"number".equals(meta.inputType)) {
+                continue;
+            }
+            if (allowed != null && !allowed.contains(key)) {
+                continue;
+            }
+            if (hasNumericSuggestion(base, key)) {
+                continue;
+            }
+            NumericCandidate best = pickBestNumericCandidate(userText, key, meta, candidates);
+            if (best == null) {
+                continue;
+            }
+            out.add(new AiSuggestionItem(
+                    key,
+                    best.value,
+                    0.78d,
+                    "根据文本数值片段提取：" + best.snippet
+            ));
+        }
+        return canonicalizeAndDedupeSuggestions(out, allowedKeys);
+    }
+
+    private boolean hasNumericSuggestion(List<AiSuggestionItem> items, String key) {
+        if (items == null || items.isEmpty()) {
+            return false;
+        }
+        for (AiSuggestionItem i : items) {
+            if (i == null || i.getKey() == null) {
+                continue;
+            }
+            if (!key.equals(i.getKey())) {
+                continue;
+            }
+            if (i.getValue() instanceof Number) {
+                return true;
+            }
+            Object normalized = normalizeNumberValue(i.getValue());
+            if (normalized instanceof Number) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private NumericCandidate pickBestNumericCandidate(
+            String userText,
+            String key,
+            QuestionFieldMeta meta,
+            List<NumericCandidate> candidates
+    ) {
+        String full = normalizeOptionToken(key + " " + (meta.label == null ? "" : meta.label));
+        Set<String> fieldWords = extractChineseWords(key + " " + (meta.label == null ? "" : meta.label));
+        int bestScore = Integer.MIN_VALUE;
+        NumericCandidate best = null;
+        for (NumericCandidate c : candidates) {
+            int score = 0;
+            String ctx = normalizeOptionToken(c.context);
+            for (String w : fieldWords) {
+                if (ctx.contains(normalizeOptionToken(w))) {
+                    score += 3;
+                } else if (normalizeOptionToken(userText).contains(normalizeOptionToken(w))) {
+                    score += 1;
+                }
+            }
+            if (full.contains("每月") && c.context.contains("每月")) score += 4;
+            if (full.contains("每年") && c.context.contains("每年")) score += 4;
+            if (containsAny(full, "原", "之前", "曾", "既有", "约定", "判决", "调解") && containsAny(ctx, "原", "之前", "那时候", "当时", "曾", "原来", "说好", "约定", "判决", "调解")) score += 6;
+            if (containsAny(full, "请求", "主张", "提高", "变更", "调整") && containsAny(ctx, "提高", "增加", "上调", "变更", "调整", "到")) score += 5;
+            if (containsAny(full, "支出", "费用", "开销", "花费") && containsAny(ctx, "支出", "费用", "开销", "花费", "教育", "医疗", "生活", "钢琴")) score += 5;
+            if (containsAny(full, "工资", "收入", "年薪", "月薪") && containsAny(ctx, "工资", "收入", "年薪", "月薪")) score += 5;
+            if (containsAny(full, "金额", "数额", "费用", "抚养费", "赔偿", "价款", "租金", "贷款", "还款", "首付")) score += 2;
+            if (c.hasYuanUnit) score += 1;
+            if (c.hasWanUnit && containsAny(full, "工资", "收入", "年薪", "金额", "数额", "费用")) score += 1;
+
+            if (score > bestScore) {
+                bestScore = score;
+                best = c;
+            }
+        }
+        if (bestScore >= 1 && best != null) {
+            return best;
+        }
+        // 对金额/费用类数字题做兜底，避免空白
+        if (containsAny(full, "金额", "数额", "费用", "支出", "价款", "抚养费", "赔偿", "还款", "首付", "工资", "收入")) {
+            return candidates.get(0);
+        }
+        return null;
+    }
+
+    private Set<String> extractChineseWords(String text) {
+        Set<String> out = new LinkedHashSet<>();
+        if (text == null || text.isBlank()) {
+            return out;
+        }
+        Matcher m = CHINESE_WORD_PATTERN.matcher(text);
+        while (m.find()) {
+            String w = m.group();
+            if (w == null || w.isBlank()) {
+                continue;
+            }
+            if (Set.of("是否", "多少", "金额", "数额", "问题", "情况", "相关", "以及", "或者", "可以", "进行", "一个", "哪个").contains(w)) {
+                continue;
+            }
+            out.add(w);
+        }
+        return out;
+    }
+
+    private List<NumericCandidate> extractNumericCandidates(String userText) {
+        List<NumericCandidate> out = new ArrayList<>();
+        Matcher m = NUMBER_WITH_UNIT_PATTERN.matcher(userText);
+        while (m.find()) {
+            String num = m.group(1);
+            String unit = m.group(2);
+            if (num == null || num.isBlank()) {
+                continue;
+            }
+            Double value = toNumericValue(num, unit);
+            if (value == null) {
+                continue;
+            }
+            int start = Math.max(0, m.start() - 24);
+            int end = Math.min(userText.length(), m.end() + 24);
+            String ctx = userText.substring(start, end);
+            String snippet = userText.substring(m.start(), m.end());
+            out.add(new NumericCandidate(value, ctx, snippet, "元".equals(unit) || "块".equals(unit), "万".equalsIgnoreCase(unit), m.start()));
+        }
+        return out;
+    }
+
+    private Double toNumericValue(String num, String unit) {
+        try {
+            double v = Double.parseDouble(num);
+            if (unit == null || unit.isBlank()) {
+                return v;
+            }
+            String u = unit.toLowerCase(Locale.ROOT);
+            if ("万".equals(u) || "w".equals(u)) return v * 10000d;
+            if ("千".equals(u)) return v * 1000d;
+            return v;
+        } catch (Exception ignore) {
+            return null;
+        }
+    }
+
+    private static class NumericCandidate {
+        private final double value;
+        private final String context;
+        private final String snippet;
+        private final boolean hasYuanUnit;
+        private final boolean hasWanUnit;
+        @SuppressWarnings("unused")
+        private final int position;
+
+        private NumericCandidate(double value, String context, String snippet, boolean hasYuanUnit, boolean hasWanUnit, int position) {
+            this.value = value;
+            this.context = context;
+            this.snippet = snippet;
+            this.hasYuanUnit = hasYuanUnit;
+            this.hasWanUnit = hasWanUnit;
+            this.position = position;
+        }
+    }
+
+    private String normalizeOptionToken(String s) {
+        if (s == null) {
+            return "";
+        }
+        String normalized = Normalizer.normalize(s.trim().toLowerCase(Locale.ROOT), Normalizer.Form.NFKC);
+        return normalized.replaceAll("\\s+", "");
     }
 
     private void addFallbackIfAllowed(Set<String> allowed, List<AiSuggestionItem> out, String key, Object value, double confidence, String reason) {
@@ -581,7 +1112,13 @@ public class AiPrefillService {
     }
 
     private boolean containsAny(String text, String... keys) {
+        if (text == null || text.isBlank() || keys == null || keys.length == 0) {
+            return false;
+        }
         for (String k : keys) {
+            if (k == null || k.isBlank()) {
+                continue;
+            }
             if (text.contains(k)) return true;
         }
         return false;

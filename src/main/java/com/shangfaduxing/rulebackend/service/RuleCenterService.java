@@ -1,6 +1,7 @@
 package com.shangfaduxing.rulebackend.service;
 
 import com.shangfaduxing.rulebackend.model.CauseCategory;
+import com.shangfaduxing.rulebackend.model.CauseItem;
 import com.shangfaduxing.rulebackend.model.JudgeResponse;
 import com.shangfaduxing.rulebackend.model.Step2EvidenceChecklistItem;
 import com.shangfaduxing.rulebackend.model.Step2FactChecklistItem;
@@ -17,6 +18,7 @@ import java.util.stream.Collectors;
 public class RuleCenterService {
 
     private static final String CAUSE_DIVORCE = "divorce_property";
+    private static final String CAUSE_PROPERTY_DISPUTE = "property_dispute";
 
     private final CauseAssetDbService causeAssetDbService;
     private final FactExtractorService factExtractorService;
@@ -95,6 +97,10 @@ public class RuleCenterService {
         return causeAssetDbService.getEnabledCategory(categoryCode);
     }
 
+    public List<CauseItem> commonCauses(String categoryCode) {
+        return causeAssetDbService.listCommonCauses(categoryCode);
+    }
+
     public List<Map<String, Object>> questionnaire(String causeCode, String questionnaireId) {
         String normalized = normalizeCauseCode(causeCode);
         return causeAssetDbService.getQuestionGroups(normalized);
@@ -104,7 +110,12 @@ public class RuleCenterService {
         if (causeCode == null || causeCode.isBlank()) {
             return CAUSE_DIVORCE;
         }
-        return causeCode;
+        String c = causeCode.trim();
+        // 前端 property_dispute 统一按离婚房产分割链路处理，避免问卷/结论跑到彩礼语义
+        if (CAUSE_PROPERTY_DISPUTE.equals(c)) {
+            return CAUSE_DIVORCE;
+        }
+        return c;
     }
 
 }

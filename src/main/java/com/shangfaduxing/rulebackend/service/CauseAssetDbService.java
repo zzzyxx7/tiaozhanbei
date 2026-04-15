@@ -14,8 +14,11 @@ public class CauseAssetDbService {
     /**
      * 不在 rule_cause 表中、但历史上或前端仍可能传入的案由码 → 直接映射问卷（与 rule_questionnaire 一致）。
      */
-    private static final Map<String, String> PREFILL_QUESTIONNAIRE_ALIASES = Map.of(
-            "divorce_property", "questionnaire_divorce_property_split"
+    private static final Map<String, String> QUESTIONNAIRE_ALIASES = Map.of(
+            // 历史别名：旧前端/旧接口里可能传 divorce_property
+            "divorce_property", "questionnaire_divorce_property_split",
+            // 前端命名 property_dispute 统一走离婚房产分割问卷
+            "property_dispute", "questionnaire_divorce_property_split"
     );
 
     private final JdbcTemplate jdbcTemplate;
@@ -44,7 +47,7 @@ public class CauseAssetDbService {
         if (causeCode == null || causeCode.isBlank()) {
             return false;
         }
-        return supports(causeCode) || PREFILL_QUESTIONNAIRE_ALIASES.containsKey(causeCode);
+        return supports(causeCode) || QUESTIONNAIRE_ALIASES.containsKey(causeCode);
     }
 
     /**
@@ -58,7 +61,7 @@ public class CauseAssetDbService {
         if (!groups.isEmpty()) {
             return groups;
         }
-        String qid = PREFILL_QUESTIONNAIRE_ALIASES.get(causeCode);
+        String qid = QUESTIONNAIRE_ALIASES.get(causeCode);
         if (qid != null && !qid.isBlank()) {
             try {
                 return questionnaireDbService.getQuestionGroups(qid);
@@ -80,6 +83,27 @@ public class CauseAssetDbService {
                         m.put("questionnaireId", rs.getString("questionnaire_id"));
                         return m;
                     }
+            );
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    public List<CauseItem> listCommonCauses(String categoryCode) {
+        if (categoryCode == null || categoryCode.isBlank()) return List.of();
+        try {
+            return jdbcTemplate.query(
+                    "SELECT c.cause_code, c.cause_name, c.questionnaire_id " +
+                            "FROM rule_common_cause cc " +
+                            "JOIN rule_cause c ON c.cause_code=cc.cause_code " +
+                            "WHERE cc.category_code=? AND cc.enabled=1 AND c.enabled=1 " +
+                            "ORDER BY cc.sort_order, cc.cause_code",
+                    (rs, rowNum) -> new CauseItem(
+                            rs.getString("cause_code"),
+                            rs.getString("cause_name"),
+                            rs.getString("questionnaire_id")
+                    ),
+                    categoryCode
             );
         } catch (Exception e) {
             return List.of();
@@ -181,10 +205,21 @@ public class CauseAssetDbService {
                     causeCode
             );
             if (questionnaireId == null || questionnaireId.isBlank()) {
-                return List.of();
+                String aliasQid = QUESTIONNAIRE_ALIASES.get(causeCode);
+                if (aliasQid == null || aliasQid.isBlank()) {
+                    return List.of();
+                }
+                return questionnaireDbService.getQuestionGroups(aliasQid);
             }
             return questionnaireDbService.getQuestionGroups(questionnaireId);
         } catch (Exception e) {
+            String aliasQid = QUESTIONNAIRE_ALIASES.get(causeCode);
+            if (aliasQid != null && !aliasQid.isBlank()) {
+                try {
+                    return questionnaireDbService.getQuestionGroups(aliasQid);
+                } catch (Exception ignored) {
+                }
+            }
             return List.of();
         }
     }

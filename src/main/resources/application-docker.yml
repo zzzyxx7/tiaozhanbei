@@ -17,6 +17,11 @@ rule:
     password: ""
     database: 0
     timeout: 2000ms
+  mq:
+    host: mq
+    port: 5672
+    user: ${MQ_USER:zkj}
+    password: ${MQ_PASSWORD:123456}
   ai:
     prefill:
       default-provider: deepseek
