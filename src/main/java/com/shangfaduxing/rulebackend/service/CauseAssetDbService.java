@@ -355,4 +355,5 @@ public class CauseAssetDbService {
             this.label = label;
         }
     }
+
 }

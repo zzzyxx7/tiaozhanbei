@@ -99,9 +99,9 @@ public class RuleCenterService {
                         f.key,
                         f.label,
                         priorityByIndex(unprovedIndex),
-                        "优先把「" + f.label + "」补强为可被采信的已证成事实",
+                        buildProvingGoal(f.label),
                         evTypes,
-                        flattenHowTo(howTo)
+                        buildActionGuidance(f.key, f.label, evTypes, howTo)
                 ));
             }
         }
@@ -143,9 +143,12 @@ public class RuleCenterService {
     private List<String> buildHandlingPath(int unprovedCount) {
         List<String> out = new ArrayList<>();
         out.add("先补齐高优先级未证成事实对应证据。");
+        out.add("优先处理主体资格/关系事实，其次处理金额、范围、时间线等争议事实。");
         out.add("对关键证据做时间线整理（发生时间-证据来源-证明目的）。");
+        out.add("逐项回答 Step2 里的证据追问，形成“事实-证据-证明目的”对应表。");
         if (unprovedCount > 0) {
             out.add("自行无法调取的材料，立案后申请调查令/调取令。");
+            out.add("没有直接证据时，先补间接印证材料，再补官方登记、鉴定或第三方证明。");
         }
         out.add("补证后再次运行 Step2，确认证成率提升。");
         return out;
@@ -165,6 +168,56 @@ public class RuleCenterService {
             flat.addAll(i.getHowTo());
         }
         return flat.isEmpty() ? List.of("补充可核验原始材料，并按证据-事实逐条对应。") : new ArrayList<>(flat);
+    }
+
+    private String buildProvingGoal(String factLabel) {
+        String label = (factLabel == null || factLabel.isBlank()) ? "该事实" : factLabel;
+        return "优先把「" + label + "」补强为能够被法院直接采信的关键事实。";
+    }
+
+    private List<String> buildActionGuidance(
+            String factKey,
+            String factLabel,
+            List<String> evidenceTypes,
+            List<Step2EvidenceHowToItem> howTo
+    ) {
+        LinkedHashSet<String> actions = new LinkedHashSet<>();
+        String factText = (factLabel == null || factLabel.isBlank()) ? factKey : factLabel;
+        String joined = String.join(" / ", evidenceTypes == null ? List.of() : evidenceTypes).toLowerCase();
+        String factNorm = ((factKey == null ? "" : factKey) + " " + (factLabel == null ? "" : factLabel)).toLowerCase();
+
+        actions.add("先明确「" + factText + "」具体要证明什么，避免只交材料但无法对应到要件。");
+        actions.add("把每份证据标注证明目的，并与该未证成事实一一对应。");
+
+        if (containsAny(joined, "转账", "流水", "银行", "支付宝", "微信", "收条", "凭证")) {
+            actions.add("整理交易时间、金额、付款人、收款人、交易号，并补用途说明。");
+        }
+        if (containsAny(joined, "聊天", "录音", "短信", "截图", "视频")) {
+            actions.add("保留原始电子载体，补充账号归属、时间节点和关键表述截图。");
+        }
+        if (containsAny(joined, "病历", "医疗", "诊断", "护理", "失能")) {
+            actions.add("按就诊时间线整理病历、诊断、费用票据和支付凭证，说明与请求金额的关系。");
+        }
+        if (containsAny(joined, "出生证明", "户口", "户籍", "亲子", "亲属关系")) {
+            actions.add("优先补官方出具的身份/关系材料；关系仍争议的，再考虑鉴定或调查取证。");
+        }
+        if (containsAny(joined, "合同", "协议", "登记", "不动产", "房产证", "公证", "判决", "调解书")) {
+            actions.add("提炼文书核心字段，如签署日期、权利人、份额、履行节点和限制条件。");
+        }
+        if (containsAny(factNorm, "金额", "费用", "月支出", "范围", "比例")) {
+            actions.add("补一份金额或范围测算表，列清计算依据、票据来源和时间区间。");
+        }
+        if (containsAny(factNorm, "时间", "期间", "时长", "发现", "分居")) {
+            actions.add("先把关键时间线写清楚，再用聊天、登记、票据、文书逐段印证。");
+        }
+        if (containsAny(factNorm, "鉴定", "举证妨碍", "拒绝配合")) {
+            actions.add("固定对方拒绝配合或妨碍举证的过程材料，必要时申请法院释明不利后果。");
+        }
+
+        actions.addAll(flattenHowTo(howTo));
+        actions.add("若暂时没有直接证据，先补能相互印证的间接材料，并记录后续调取路径。");
+
+        return new ArrayList<>(actions);
     }
 
     private double round2(double v) {

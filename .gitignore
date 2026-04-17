@@ -12,5 +12,6 @@ target/
 # 本地/服务器上的全库备份（勿提交）
 rule_engine_db_init.sql
 rule_engine_db_full.sql
+rule_engine_db_local_full.sql
 *_db_full.sql
 sql/docker-entrypoint-initdb.d/init.sql

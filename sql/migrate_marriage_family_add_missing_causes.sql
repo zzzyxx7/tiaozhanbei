@@ -326,8 +326,8 @@ VALUES
 ('target_post_divorce_damage_economic','law_1079',1),('target_post_divorce_damage_economic','law_1087',2),
 
 -- marriage_invalid_dispute
-('target_invalid_marriage_confirm','law_1079',1),('target_invalid_marriage_confirm','law_1087',2),
-('target_invalid_marriage_property_return','law_1079',1),('target_invalid_marriage_property_return','law_1087',2),
+('target_invalid_marriage_confirm','law_1051',1),('target_invalid_marriage_confirm','law_1052',2),('target_invalid_marriage_confirm','law_1054',3),
+('target_invalid_marriage_property_return','law_1051',1),('target_invalid_marriage_property_return','law_1054',2),
 
 -- marriage_annulment_dispute
 ('target_annulment_request','law_1079',1),('target_annulment_request','law_1087',2),
@@ -342,10 +342,10 @@ VALUES
 ('target_cohab_child_custody','law_1084',1),('target_cohab_child_custody','law_1085',2),
 
 -- paternity_confirmation_dispute / disclaimer
-('target_paternity_confirm','law_1084',1),
-('target_paternity_confirm_evidence','law_1084',1),
-('target_paternity_disclaimer','law_1084',1),
-('target_paternity_disclaimer_evidence','law_1084',1),
+('target_paternity_confirm','law_1073',1),('target_paternity_confirm','law_81',2),
+('target_paternity_confirm_evidence','law_1073',1),('target_paternity_confirm_evidence','law_81',2),
+('target_paternity_disclaimer','law_1073',1),('target_paternity_disclaimer','law_81',2),
+('target_paternity_disclaimer_evidence','law_1073',1),('target_paternity_disclaimer_evidence','law_81',2),
 
 -- sibling_support_dispute
 ('target_sibling_support_fee_claim','law_1067',1),
@@ -356,8 +356,8 @@ VALUES
 ('target_adoption_dissolve','law_1084',1),
 ('target_guardianship_assign','law_1084',1),
 ('target_guardianship_evidence','law_1084',1),
-('target_visitation_fix','law_1084',1),
-('target_visitation_evidence','law_1084',1),
+('target_visitation_fix','law_1086',1),
+('target_visitation_evidence','law_1086',1),
 
 -- family_partition_dispute
 ('target_family_partition_plan','law_1087',1),
