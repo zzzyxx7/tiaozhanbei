@@ -11,6 +11,7 @@ public class FactExtractorService {
     private static final String CAUSE_UNPAID = "labor_unpaid_wages";
     private static final String CAUSE_NO_CONTRACT = "labor_no_contract";
     private static final String CAUSE_BETROTHAL = "betrothal_property";
+    private static final String CAUSE_BETROTHAL_NEW = "marriage_betrothal_property_dispute";
     private static final String CAUSE_DIVORCE_GENERAL = "divorce_dispute";
     private static final String CAUSE_POST_DIVORCE = "post_divorce_property";
     private static final String CAUSE_LABOR_INJURY = "labor_injury_compensation";
@@ -30,7 +31,7 @@ public class FactExtractorService {
         if (CAUSE_NO_CONTRACT.equals(causeCode)) {
             return extractLaborNoContract(answers);
         }
-        if (CAUSE_BETROTHAL.equals(causeCode)) {
+        if (CAUSE_BETROTHAL.equals(causeCode) || CAUSE_BETROTHAL_NEW.equals(causeCode)) {
             return extractBetrothal(answers);
         }
         if (CAUSE_DIVORCE_GENERAL.equals(causeCode)) {
@@ -62,7 +63,14 @@ public class FactExtractorService {
         Map<String, Object> safeAnswers = answers == null ? Map.of() : answers;
         for (Map.Entry<String, Object> e : safeAnswers.entrySet()) {
             if (e.getKey() == null || e.getKey().isBlank()) continue;
-            facts.put(e.getKey().trim(), e.getValue());
+            String k = e.getKey().trim();
+            Object v = e.getValue();
+            if (v instanceof String s) {
+                String normalized = normalizeMarriageFamilyChoiceIfNeeded(k, s);
+                facts.put(k, normalized);
+            } else {
+                facts.put(k, v);
+            }
         }
         return facts;
     }
@@ -169,6 +177,7 @@ public class FactExtractorService {
         putB(facts, safeAnswers, "共同财产范围清晰");
         putB(facts, safeAnswers, "存在共同债务");
         putB(facts, safeAnswers, "存在家庭暴力或重大过错");
+        putB(facts, safeAnswers, "有家暴或报警记录");
         return facts;
     }
 
@@ -180,6 +189,8 @@ public class FactExtractorService {
         putB(facts, safeAnswers, "离婚协议财产条款未履行");
         putB(facts, safeAnswers, "存在未分割共同财产");
         putB(facts, safeAnswers, "新发现财产线索");
+        putB(facts, safeAnswers, "发现财产线索时间明确");
+        putB(facts, safeAnswers, "离婚后已过三年风险");
         putB(facts, safeAnswers, "存在隐藏转移财产线索");
         putB(facts, safeAnswers, "有证据证明隐藏转移");
         putB(facts, safeAnswers, "请求再次分割");
@@ -372,5 +383,65 @@ public class FactExtractorService {
         } catch (Exception ignore) {
             return 0d;
         }
+    }
+
+    /**
+     * 对婚姻家事新案由中的少数 choice 字段做“中文 label → option_value”兜底归一化。
+     * 目的：即使前端/用户把 label 直接传到后端，Step1/Step2 里按 option_value 写的规则也能稳定命中。
+     */
+    private static String normalizeMarriageFamilyChoiceIfNeeded(String key, String raw) {
+        if (raw == null) return null;
+        String v = raw.trim();
+        if (v.isBlank()) return v;
+        return switch (key) {
+            case "离婚程序中是否已处理损害赔偿" -> switch (v) {
+                case "handled_yes", "已处理" -> "handled_yes";
+                case "handled_no", "未处理" -> "handled_no";
+                case "unclear", "暂不明确" -> "unclear";
+                default -> v;
+            };
+            case "过错类型" -> switch (v) {
+                case "bigamy", "重婚" -> "bigamy";
+                case "cohabitation", "与他人同居" -> "cohabitation";
+                case "domestic_violence", "家庭暴力" -> "domestic_violence";
+                case "abuse_abandonment", "虐待遗弃" -> "abuse_abandonment";
+                case "other_tort", "其他侵害行为" -> "other_tort";
+                default -> v;
+            };
+            case "损害后果类型" -> switch (v) {
+                case "mental", "精神损害" -> "mental";
+                case "medical", "治疗费用" -> "medical";
+                case "income_loss", "误工收入损失" -> "income_loss";
+                case "mixed", "多项损害并存" -> "mixed";
+                default -> v;
+            };
+            case "无效事由类型" -> switch (v) {
+                case "prior_marriage", "存在在先婚姻未解除" -> "prior_marriage";
+                case "prohibited_kinship", "属于禁止结婚亲属关系" -> "prohibited_kinship";
+                case "underage", "结婚时未达法定婚龄" -> "underage";
+                default -> v;
+            };
+            case "撤销事由类型" -> switch (v) {
+                case "coercion", "胁迫结婚" -> "coercion";
+                case "concealed_disease", "婚前隐瞒重大疾病" -> "concealed_disease";
+                default -> v;
+            };
+            case "收养路径类型" -> switch (v) {
+                case "registered", "登记收养" -> "registered";
+                case "de_facto", "事实收养" -> "de_facto";
+                case "dissolution", "解除收养" -> "dissolution";
+                default -> v;
+            };
+            case "解除原因类型" -> switch (v) {
+                case "lack_parental_consent", "生父母不同意或撤回同意" -> "lack_parental_consent";
+                case "adopter_unqualified", "收养人不具备条件" -> "adopter_unqualified";
+                case "adopted_overage", "被收养人不符合年龄或情形" -> "adopted_overage";
+                case "material_defect_or_fraud", "重大瑕疵/欺诈胁迫" -> "material_defect_or_fraud";
+                case "best_interest_conflict", "不利于未成年人利益" -> "best_interest_conflict";
+                case "other", "其他" -> "other";
+                default -> v;
+            };
+            default -> v;
+        };
     }
 }

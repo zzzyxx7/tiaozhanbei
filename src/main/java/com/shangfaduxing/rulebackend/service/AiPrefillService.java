@@ -24,13 +24,29 @@ public class AiPrefillService {
     private static final Pattern CHINESE_WORD_PATTERN = Pattern.compile("[\\u4e00-\\u9fa5]{2,}");
     private static final String CAUSE_PROPERTY_DISPUTE = "property_dispute";
     private static final String CAUSE_DIVORCE_PROPERTY = "divorce_property";
+    private static final String CAUSE_BETROTHAL_LEGACY = "betrothal_property";
+    private static final String CAUSE_BETROTHAL_NEW = "marriage_betrothal_property_dispute";
     private static final Set<String> MARRIAGE_CAUSE_CODES = Set.of(
             "divorce_dispute",
             "divorce_property",
             "post_divorce_property",
+            "post_divorce_damage_liability_dispute",
+            "marriage_invalid_dispute",
+            "marriage_annulment_dispute",
+            "spousal_property_agreement_dispute",
+            "in_marriage_property_division_dispute",
+            "cohabitation_dispute",
+            "paternity_confirmation_dispute",
+            "paternity_disclaimer_dispute",
             "child_support_dispute",
+            "sibling_support_dispute",
             "support_dispute",
             "inherit_dispute",
+            "adoption_dispute",
+            "guardianship_dispute",
+            "visitation_dispute",
+            "family_partition_dispute",
+            "marriage_betrothal_property_dispute",
             "betrothal_property",
             CAUSE_PROPERTY_DISPUTE
     );
@@ -150,6 +166,10 @@ public class AiPrefillService {
         String c = raw.trim();
         if (CAUSE_PROPERTY_DISPUTE.equals(c)) {
             return CAUSE_DIVORCE_PROPERTY;
+        }
+        // 历史别名兼容：彩礼旧码统一映射到当前婚约财产案由
+        if (CAUSE_BETROTHAL_LEGACY.equals(c)) {
+            return CAUSE_BETROTHAL_NEW;
         }
         return c;
     }
@@ -671,10 +691,17 @@ public class AiPrefillService {
         if (causeCode == null || causeCode.isBlank()) {
             return false;
         }
-        if (MARRIAGE_CAUSE_CODES.contains(causeCode)) {
-            return true;
+        String normalized = normalizeCauseCode(causeCode);
+        // 优先用 rule_cause.category_code='marriage_family' 动态判断，避免新案由加进库后仍无法触发“婚姻语义相关性过滤”
+        try {
+            if (causeAssetDbService != null && causeAssetDbService.isMarriageFamilyCause(normalized)) {
+                return true;
+            }
+        } catch (Exception ignored) {
         }
-        return MARRIAGE_CAUSE_CODES.contains(normalizeCauseCode(causeCode));
+        // 兜底：兼容历史静态集合
+        if (MARRIAGE_CAUSE_CODES.contains(causeCode)) return true;
+        return MARRIAGE_CAUSE_CODES.contains(normalized);
     }
 
     private Object normalizeChoiceValue(Object rawValue, QuestionFieldMeta meta) {
@@ -1053,7 +1080,7 @@ public class AiPrefillService {
                 addFallbackIfAllowed(allowed, out, "存在未分割共同财产", true, 0.7, "文本涉及财产分割或线索");
                 addFallbackIfAllowed(allowed, out, "请求再次分割", true, 0.65, "文本涉及再次分割语义");
             }
-        } else if ("betrothal_property".equals(causeCode)) {
+        } else if ("betrothal_property".equals(causeCode) || "marriage_betrothal_property_dispute".equals(causeCode)) {
             if (containsAny(t, "彩礼", "聘礼")) {
                 addFallbackIfAllowed(allowed, out, "存在彩礼给付", true, 0.85, "文本涉及彩礼给付");
             }
@@ -1088,7 +1115,41 @@ public class AiPrefillService {
             addFallbackIfAllowed(allowed, out, "存在劳动关系", true, 0.65, "工伤待遇以劳动关系为前提");
         }
 
+        // 新增婚姻家事案由在 AI 调用失败时的通用兜底：
+        // 按用户文本与问卷 key 的语义重合度，为 allowed keys 自动补最小可用建议，避免“完全无预填”。
+        if (out.isEmpty() && isMarriageCause(causeCode)) {
+            out.addAll(genericMarriageFallbackByAllowedKeys(t, allowed));
+        }
+
         return dedupeFallbackByKey(out);
+    }
+
+    private List<AiSuggestionItem> genericMarriageFallbackByAllowedKeys(String normalizedText, Set<String> allowed) {
+        if (allowed == null || allowed.isEmpty()) {
+            return List.of();
+        }
+        List<AiSuggestionItem> out = new ArrayList<>();
+        for (String key : allowed) {
+            if (key == null || key.isBlank()) continue;
+            String k = key.toLowerCase(Locale.ROOT);
+
+            // 仅对布尔判断类 key 做保守兜底，避免误填金额/枚举。
+            if (!containsAny(k, "是否", "存在", "已", "有", "涉及", "办理", "完成", "拒绝", "同意", "争议")) {
+                continue;
+            }
+            // 用户文本与 key 至少要有一组核心词命中才给 true 建议。
+            if (containsAny(normalizedText,
+                    "离婚", "婚姻", "结婚", "分居", "家暴", "过错",
+                    "子女", "抚养", "扶养", "赡养", "探望", "监护",
+                    "财产", "债务", "彩礼", "同居", "亲子", "收养", "分家", "继承")
+                    && containsAny(k,
+                    "离婚", "婚姻", "结婚", "分居", "家暴", "过错",
+                    "子女", "抚养", "扶养", "赡养", "探望", "监护",
+                    "财产", "债务", "彩礼", "同居", "亲子", "收养", "分家", "继承")) {
+                out.add(new AiSuggestionItem(key, true, 0.62, "AI失败后按案由问卷key语义兜底匹配"));
+            }
+        }
+        return out;
     }
 
     private List<AiSuggestionItem> dedupeFallbackByKey(List<AiSuggestionItem> out) {

@@ -163,6 +163,26 @@ public class CauseAssetDbService {
         }
     }
 
+    public boolean isInCategory(String causeCode, String categoryCode) {
+        if (causeCode == null || causeCode.isBlank()) return false;
+        if (categoryCode == null || categoryCode.isBlank()) return false;
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(1) FROM rule_cause WHERE cause_code=? AND enabled=1 AND category_code=?",
+                    Integer.class,
+                    causeCode,
+                    categoryCode
+            );
+            return cnt != null && cnt > 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public boolean isMarriageFamilyCause(String causeCode) {
+        return isInCategory(causeCode, "marriage_family");
+    }
+
     public CauseCategory getEnabledCategory(String categoryCode) {
         if (categoryCode == null || categoryCode.isBlank()) {
             return null;

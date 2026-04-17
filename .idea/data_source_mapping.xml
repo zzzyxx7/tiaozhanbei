@@ -7,6 +7,10 @@
     <file url="file://$PROJECT_DIR$/sql/migrate_cause_categories.sql" value="83b22336-e2bd-4ea3-a784-7e33b822edba" />
     <file url="file://$PROJECT_DIR$/sql/migrate_common_causes.sql" value="83b22336-e2bd-4ea3-a784-7e33b822edba" />
     <file url="file://$PROJECT_DIR$/sql/migrate_marriage_case_frontend_codes.sql" value="83b22336-e2bd-4ea3-a784-7e33b822edba" />
+    <file url="file://$PROJECT_DIR$/sql/migrate_marriage_family_add_missing_causes.sql" value="83b22336-e2bd-4ea3-a784-7e33b822edba" />
+    <file url="file://$PROJECT_DIR$/sql/migrate_marriage_family_fix_step1_judge_conditions.sql" value="83b22336-e2bd-4ea3-a784-7e33b822edba" />
+    <file url="file://$PROJECT_DIR$/sql/migrate_marriage_family_merge_12_betrothal_property_general.sql" value="83b22336-e2bd-4ea3-a784-7e33b822edba" />
+    <file url="file://$PROJECT_DIR$/sql/migrate_marriage_family_merge_12_betrothal_property_general_fixed_v2.sql" value="83b22336-e2bd-4ea3-a784-7e33b822edba" />
     <file url="file://$PROJECT_DIR$/sql/migrate_rule_judge_data_divorce.sql" value="83b22336-e2bd-4ea3-a784-7e33b822edba" />
     <file url="file://$PROJECT_DIR$/sql/migrate_rule_judge_data_labor.sql" value="83b22336-e2bd-4ea3-a784-7e33b822edba" />
     <file url="file://$PROJECT_DIR$/sql/migrate_rule_judge_tables.sql" value="83b22336-e2bd-4ea3-a784-7e33b822edba" />

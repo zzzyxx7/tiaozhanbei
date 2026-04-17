@@ -7,6 +7,10 @@
     <file url="file://$PROJECT_DIR$/sql/migrate_cause_categories.sql" dialect="MySQL" />
     <file url="file://$PROJECT_DIR$/sql/migrate_common_causes.sql" dialect="MySQL" />
     <file url="file://$PROJECT_DIR$/sql/migrate_marriage_case_frontend_codes.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/sql/migrate_marriage_family_add_missing_causes.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/sql/migrate_marriage_family_fix_step1_judge_conditions.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/sql/migrate_marriage_family_merge_12_betrothal_property_general.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/sql/migrate_marriage_family_merge_12_betrothal_property_general_fixed_v2.sql" dialect="MySQL" />
     <file url="file://$PROJECT_DIR$/sql/migrate_rule_judge_data_divorce.sql" dialect="MySQL" />
     <file url="file://$PROJECT_DIR$/sql/migrate_rule_judge_data_labor.sql" dialect="MySQL" />
     <file url="file://$PROJECT_DIR$/sql/migrate_rule_judge_tables.sql" dialect="MySQL" />
