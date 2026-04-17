@@ -5,7 +5,12 @@ import com.shangfaduxing.rulebackend.model.WeChatLoginRequest;
 import com.shangfaduxing.rulebackend.model.WeChatLoginResponse;
 import com.shangfaduxing.rulebackend.service.WechatMiniAppAuthService;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/rule/auth")
@@ -17,9 +22,6 @@ public class AuthController {
         this.wechatMiniAppAuthService = wechatMiniAppAuthService;
     }
 
-    /**
-     * 小程序：wx.login 取得 code 后调用本接口，换取业务 userId 与 JWT。
-     */
     @PostMapping(value = "/wechat/login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public WeChatLoginResponse wechatLogin(@RequestBody WeChatLoginRequest request) {
         if (request == null) {
@@ -31,9 +33,6 @@ public class AuthController {
         return wechatMiniAppAuthService.loginByCode(request.getCode());
     }
 
-    /**
-     * 校验 Bearer Token 并返回当前用户资料（可选，用于调试或「我的」页）。
-     */
     @GetMapping(value = "/me", produces = MediaType.APPLICATION_JSON_VALUE)
     public AuthMeResponse me(@RequestHeader(value = "Authorization", required = false) String authorization) {
         return wechatMiniAppAuthService.me(authorization);

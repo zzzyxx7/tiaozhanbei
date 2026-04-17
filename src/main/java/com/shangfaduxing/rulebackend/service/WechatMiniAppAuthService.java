@@ -78,7 +78,8 @@ public class WechatMiniAppAuthService {
 
         if (wx.isError()) {
             out.setSuccess(false);
-            out.setMessage("微信返回错误: " + (wx.getErrmsg() != null ? wx.getErrmsg() : "") + (wx.getErrcode() != null ? " (" + wx.getErrcode() + ")" : ""));
+            out.setMessage("微信返回错误: " + (wx.getErrmsg() != null ? wx.getErrmsg() : "")
+                    + (wx.getErrcode() != null ? " (" + wx.getErrcode() + ")" : ""));
             return out;
         }
         if (wx.getOpenid() == null || wx.getOpenid().isBlank()) {
