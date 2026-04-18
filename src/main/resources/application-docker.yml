@@ -39,8 +39,17 @@ rule:
     miniapp:
       app-id: ${WECHAT_MINIAPP_APP_ID:}
       secret: ${WECHAT_MINIAPP_SECRET:}
+  alioss:
+    endpoint: ${RULE_ALIOSS_ENDPOINT:}
+    access-key-id: ${RULE_ALIOSS_ACCESS_KEY_ID:}
+    access-key-secret: ${RULE_ALIOSS_ACCESS_KEY_SECRET:}
+    bucket-name: ${RULE_ALIOSS_BUCKET_NAME:}
 
   auth:
     jwt:
       secret: ${RULE_AUTH_JWT_SECRET:}
       expire-seconds: ${RULE_AUTH_JWT_EXPIRE_SECONDS:604800}
+    avatar:
+      storage-dir: ${RULE_AUTH_AVATAR_STORAGE_DIR:/data/uploads/avatars}
+      public-base-url: ${RULE_AUTH_AVATAR_PUBLIC_BASE_URL:}
+      max-size-mb: ${RULE_AUTH_AVATAR_MAX_SIZE_MB:5}

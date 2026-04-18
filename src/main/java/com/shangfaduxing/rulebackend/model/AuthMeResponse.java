@@ -6,6 +6,7 @@ public class AuthMeResponse {
     private String message;
     private String userId;
     private String nickname;
+    private String avatarUrl;
 
     public boolean isSuccess() {
         return success;
@@ -37,5 +38,13 @@ public class AuthMeResponse {
 
     public void setNickname(String nickname) {
         this.nickname = nickname;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
     }
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shangfaduxing.rulebackend.config.RuleAuthJwtProperties;
 import com.shangfaduxing.rulebackend.config.RuleWeChatProperties;
 import com.shangfaduxing.rulebackend.model.AuthMeResponse;
+import com.shangfaduxing.rulebackend.model.WeChatLoginRequest;
 import com.shangfaduxing.rulebackend.model.WeChatLoginResponse;
 import com.shangfaduxing.rulebackend.model.wx.WxCode2SessionResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -49,7 +50,11 @@ public class WechatMiniAppAuthService {
     }
 
     @Transactional
-    public WeChatLoginResponse loginByCode(String code) {
+    public WeChatLoginResponse loginByCode(WeChatLoginRequest body) {
+        String code = body != null ? body.getCode() : null;
+        String nickname = normalizeNickname(body != null ? body.getNickname() : null);
+        String avatarUrl = normalizeAvatarUrl(body != null ? body.getAvatarUrl() : null);
+
         WeChatLoginResponse out = new WeChatLoginResponse();
         if (code == null || code.isBlank()) {
             out.setSuccess(false);
@@ -96,14 +101,34 @@ public class WechatMiniAppAuthService {
         if (userId == null) {
             userId = UUID.randomUUID().toString();
             jdbcTemplate.update(
-                    "INSERT INTO rule_user_profile(user_id, wx_app_id, wx_openid, wx_unionid) VALUES(?,?,?,?)",
-                    userId, appId, openid, unionid
+                    "INSERT INTO rule_user_profile(user_id, wx_app_id, wx_openid, wx_unionid, nickname, avatar_url) VALUES(?,?,?,?,?,?)",
+                    userId, appId, openid, unionid, nickname, avatarUrl
             );
-        } else if (unionid != null) {
-            jdbcTemplate.update(
-                    "UPDATE rule_user_profile SET wx_unionid=? WHERE user_id=? AND (wx_unionid IS NULL OR wx_unionid='')",
-                    unionid, userId
-            );
+        } else {
+            if (unionid != null) {
+                jdbcTemplate.update(
+                        "UPDATE rule_user_profile SET wx_unionid=? WHERE user_id=? AND (wx_unionid IS NULL OR wx_unionid='')",
+                        unionid, userId
+                );
+            }
+            if (nickname != null || avatarUrl != null) {
+                if (nickname != null && avatarUrl != null) {
+                    jdbcTemplate.update(
+                            "UPDATE rule_user_profile SET nickname=?, avatar_url=? WHERE user_id=?",
+                            nickname, avatarUrl, userId
+                    );
+                } else if (nickname != null) {
+                    jdbcTemplate.update(
+                            "UPDATE rule_user_profile SET nickname=? WHERE user_id=?",
+                            nickname, userId
+                    );
+                } else {
+                    jdbcTemplate.update(
+                            "UPDATE rule_user_profile SET avatar_url=? WHERE user_id=?",
+                            avatarUrl, userId
+                    );
+                }
+            }
         }
 
         String token = jwtTokenService.createToken(userId);
@@ -124,21 +149,49 @@ public class WechatMiniAppAuthService {
             return r;
         }
         String userId = uidOpt.get();
-        List<String> names = jdbcTemplate.query(
-                "SELECT nickname FROM rule_user_profile WHERE user_id=? LIMIT 1",
-                (rs, i) -> rs.getString(1),
+        List<AuthMeResponse> rows = jdbcTemplate.query(
+                "SELECT nickname, avatar_url FROM rule_user_profile WHERE user_id=? LIMIT 1",
+                (rs, i) -> {
+                    AuthMeResponse row = new AuthMeResponse();
+                    row.setNickname(rs.getString(1));
+                    row.setAvatarUrl(rs.getString(2));
+                    return row;
+                },
                 userId
         );
-        if (names.isEmpty()) {
+        if (rows.isEmpty()) {
             r.setSuccess(false);
             r.setMessage("用户不存在");
             return r;
         }
         r.setSuccess(true);
         r.setUserId(userId);
-        r.setNickname(names.get(0));
+        r.setNickname(rows.get(0).getNickname());
+        r.setAvatarUrl(rows.get(0).getAvatarUrl());
         r.setMessage("ok");
         return r;
+    }
+
+    private static String normalizeNickname(String s) {
+        if (s == null) {
+            return null;
+        }
+        String t = s.trim();
+        if (t.isEmpty()) {
+            return null;
+        }
+        return t.length() > 128 ? t.substring(0, 128) : t;
+    }
+
+    private static String normalizeAvatarUrl(String s) {
+        if (s == null) {
+            return null;
+        }
+        String t = s.trim();
+        if (t.isEmpty()) {
+            return null;
+        }
+        return t.length() > 1024 ? t.substring(0, 1024) : t;
     }
 
     private String findUserIdByWx(String appId, String openid) {

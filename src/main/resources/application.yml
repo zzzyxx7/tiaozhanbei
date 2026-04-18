@@ -30,6 +30,10 @@ server:
   port: ${rule.server.port:8080}
   tomcat:
     use-apr: NEVER
+  servlet:
+    multipart:
+      max-file-size: ${rule.auth.avatar.max-file-size:8MB}
+      max-request-size: ${rule.auth.avatar.max-request-size:8MB}
 
 springdoc:
   api-docs:
