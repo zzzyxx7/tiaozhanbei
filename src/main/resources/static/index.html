@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>尚法笃行问卷与规则服务平台</title>
+  <meta name="description" content="尚法笃行问卷与规则服务平台，为微信小程序提供问卷、规则判断、报告生成等后台接口服务。">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #5b6472;
+      --line: #d8e0ea;
+      --brand: #1d4ed8;
+      --brand-soft: #eff6ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", Arial, sans-serif;
+      background: linear-gradient(180deg, #eef4ff 0%, var(--bg) 40%, #f8fafc 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 40px 20px 56px;
+    }
+
+    .hero,
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+    }
+
+    .hero {
+      padding: 32px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--brand-soft);
+      color: var(--brand);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    h1 {
+      margin: 18px 0 12px;
+      font-size: 32px;
+      line-height: 1.25;
+      font-weight: 700;
+    }
+
+    p {
+      margin: 0;
+      line-height: 1.75;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfdff;
+    }
+
+    .card h2,
+    .section h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      line-height: 1.4;
+    }
+
+    .section {
+      margin-top: 18px;
+      padding: 24px;
+    }
+
+    ul {
+      margin: 10px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .footer {
+      margin-top: 18px;
+      padding: 18px 24px;
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .footer p + p {
+      margin-top: 8px;
+    }
+
+    a {
+      color: var(--brand);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: #eef2f7;
+      color: #0f172a;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+    }
+
+    @media (max-width: 640px) {
+      .wrap {
+        padding: 20px 14px 32px;
+      }
+
+      .hero,
+      .section {
+        padding: 20px;
+      }
+
+      h1 {
+        font-size: 26px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <span class="badge">正常开放访问</span>
+      <h1>尚法笃行问卷与规则服务平台</h1>
+      <p>
+        本站为微信小程序及相关业务提供后台接口服务，主要用于问卷采集、规则判断、案例参考、
+        报告生成与用户数据处理。本站当前页面用于公开展示网站基础信息，接口服务正常运行。
+      </p>
+      <div class="grid">
+        <article class="card">
+          <h2>服务内容</h2>
+          <p>为前端小程序提供规则引擎、问卷数据处理、案件类型查询、报告生成等 API 服务。</p>
+        </article>
+        <article class="card">
+          <h2>访问说明</h2>
+          <p>首页用于网站信息展示，业务接口由后端程序对外提供，接口路径统一位于 <code>/api/</code> 下。</p>
+        </article>
+        <article class="card">
+          <h2>技术状态</h2>
+          <p>网站已部署上线，可通过域名正常访问；如需接口文档，可访问系统内置文档页面。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>网站公开信息</h2>
+      <ul>
+        <li>网站域名：<strong>zzzyxx.cn</strong> / <strong>www.zzzyxx.cn</strong></li>
+        <li>网站性质：提供微信小程序配套后台能力的业务网站</li>
+        <li>主要功能：问卷、规则、案例、报告、用户认证与数据服务</li>
+        <li>当前状态：网站可访问，备案及公示信息将在审核通过后按要求展示于页面底部</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>接口与系统页面</h2>
+      <ul>
+        <li>接口基础路径：<code>/api/</code></li>
+        <li>接口文档页面：<a href="/swagger-ui/index.html">/swagger-ui/index.html</a></li>
+        <li>OpenAPI 描述：<a href="/v3/api-docs">/v3/api-docs</a></li>
+      </ul>
+    </section>
+
+    <div class="footer">
+      <p>ICP备案号：备案通过后展示</p>
+      <p>公安备案号：备案通过后展示</p>
+      <p>提示：如用于备案审核，请确保 <code>http://zzzyxx.cn</code> 与 <code>http://www.zzzyxx.cn</code> 均可直接打开本页。</p>
+    </div>
+  </main>
+</body>
+</html>
