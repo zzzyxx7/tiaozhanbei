@@ -67,8 +67,11 @@ services:
         condition: service_healthy
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./deploy/nginx/zzzyxx.cn.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./www.zzzyxx.cn.pem:/etc/nginx/ssl/www.zzzyxx.cn.pem:ro
+      - ./www.zzzyxx.cn.key:/etc/nginx/ssl/www.zzzyxx.cn.key:ro
 
   redis:
     image: redis:7-alpine

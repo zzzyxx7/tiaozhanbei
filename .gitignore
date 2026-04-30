@@ -15,3 +15,7 @@ rule_engine_db_full.sql
 rule_engine_db_local_full.sql
 *_db_full.sql
 sql/docker-entrypoint-initdb.d/init.sql
+
+# SSL certificates
+*.pem
+*.key

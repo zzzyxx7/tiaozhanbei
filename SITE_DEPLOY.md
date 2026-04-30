@@ -1,106 +1,98 @@
-# 网站首页与域名接入说明
+# Site Deploy
 
-这个项目现在已经补上了一个可公开访问的首页：
+This repo is wired for HTTPS on:
 
-- Spring Boot 首页：`/`
-- Swagger 文档：`/swagger-ui/index.html`
-- OpenAPI：`/v3/api-docs`
+- `https://zzzyxx.cn`
+- `https://www.zzzyxx.cn`
 
-并且已经把 `nginx` 加进 `docker compose`，你不需要再单独在宿主机安装配置 Nginx。
+The mini program frontend is configured to call:
 
-## 你的目标结果
+- `https://www.zzzyxx.cn`
 
-下面两个地址都能直接打开首页，不再需要 `:8080`：
+## Required certificate files
 
-- `http://zzzyxx.cn`
-- `http://www.zzzyxx.cn`
+Place these files in the repo root on the server:
 
-## 上线步骤
+- `www.zzzyxx.cn.pem`
+- `www.zzzyxx.cn.key`
 
-### 1. 服务器上更新代码
+`docker compose` mounts them into the Nginx container automatically.
+
+## Server deployment
+
+### 1. Upload or update the repo
 
 ```bash
 cd /opt/rule-backend
 git pull origin main
 ```
 
-如果你的分支不是 `main`，把它换成实际分支名。
+If your branch is not `main`, replace it with the correct branch name.
 
-### 2. 启动或重建容器
+### 2. Copy the certificate files to the server repo root
+
+```bash
+scp www.zzzyxx.cn.pem root@YOUR_SERVER_IP:/opt/rule-backend/
+scp www.zzzyxx.cn.key root@YOUR_SERVER_IP:/opt/rule-backend/
+```
+
+### 3. Start or rebuild containers
 
 ```bash
 cd /opt/rule-backend
 docker compose up -d --build
 ```
 
-这一步会启动：
+### 4. Open required ports
 
-- `rule-backend`
-- `nginx`
-- `db`
-- `redis`
-- `mq`
-
-### 3. 开放阿里云安全组端口
-
-至少确认下面端口已放行：
+In Alibaba Cloud security group and OS firewall, allow:
 
 - `80/tcp`
-- `8080/tcp`（可保留，仅用于你自己调试）
-
-如果你之后要上 HTTPS，再开放：
-
 - `443/tcp`
+- `8080/tcp` (optional, only for direct backend debug)
 
-### 4. 检查域名解析
+### 5. Verify DNS
 
-确认这两个记录都指向 `8.136.46.14`：
+Make sure both records point to `8.136.46.14`:
 
 - `@` -> `8.136.46.14`
 - `www` -> `8.136.46.14`
 
-### 5. 检查容器状态
+## Verification
+
+On the server:
 
 ```bash
 docker compose ps
 docker compose logs --tail=100 nginx
 docker compose logs --tail=100 rule-backend
+curl -I http://127.0.0.1
+curl -I https://127.0.0.1 -k
+curl https://127.0.0.1/v3/api-docs -k
 ```
 
-## 验证命令
-
-先在服务器本机检查：
-
-```bash
-curl http://127.0.0.1:8080/
-curl http://127.0.0.1/
-curl http://127.0.0.1/v3/api-docs
-```
-
-再在你本地电脑或手机流量下访问：
+From your own browser:
 
 ```text
-http://zzzyxx.cn
-http://www.zzzyxx.cn
-http://8.136.46.14
+https://zzzyxx.cn
+https://www.zzzyxx.cn
+https://www.zzzyxx.cn/v3/api-docs
 ```
 
-## 如果 80 端口访问不通
+## If HTTPS does not work
 
-重点排查这几个地方：
+Check these first:
 
-1. 阿里云安全组是否放行 `80`
-2. 服务器系统防火墙是否拦截 `80`
-3. 宿主机上是否已有别的程序占用了 `80`
+1. Port `443` is open in the Alibaba Cloud security group
+2. The server firewall is not blocking `443`
+3. The certificate files exist in `/opt/rule-backend`
+4. Docker mounted the files successfully
 
-可用下面命令检查：
+Useful commands:
 
 ```bash
-sudo ss -ltnp | grep :80
+sudo ss -ltnp | grep :443
 docker compose ps
 docker compose logs --tail=100 nginx
+docker exec -it rule-nginx ls -l /etc/nginx/ssl
 ```
-
-## 备案通过后需要补的内容
-
-拿到 ICP 备案号和公安备案号后，把首页底部两行文字改成正式编号即可。
